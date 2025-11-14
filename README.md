@@ -20,13 +20,14 @@ Predicting player LTV in mobile games is challenging due to:
 * **Long-tailed distribution** among spenders
 * The need to model **heterogeneous behavioral patterns**
 
-To address this, we use a **3-stage cascading pipeline**:
+
+To address this, we use a **3-stage pipeline**:
 
 1. **Stage 1 – Payer Classification** (Non-payer vs. Payer)
 2. **Stage 2 – High-value Payer Classification** (Low spender vs. High spender)
 3. **Stage 3 – Two-head Regression** (Separate regressors for each segment)
 
-This architecture enables the model to focus on progressively smaller—and more meaningful—subsets of the population for more accurate LTV estimation.
+
 
 
 
@@ -88,7 +89,7 @@ flowchart TD
 * **Input:** 5 days log data after launching game (including 10 months PAY_AMT_SUM column for training)
 * **Output:** `payer_pred ∈ {0,1}`
 
-### Key Notes
+**Key Notes**
 
 * Handles heavy class imbalance using stratified splits & weighted loss.
 * Outputs predictions used to filter data for Stage 2.
@@ -103,7 +104,7 @@ flowchart TD
 * **Input:** Subset of users predicted as payers in Stage 1
 * **Output:** `high_value_pred ∈ {0,1}`
 
-### Key Notes
+**Key Notes**
 
 * Cutoff for defining high-value payers is based on top-percentile spend (top 5%).
 * Important for directing users to the correct regression head.
@@ -121,7 +122,7 @@ flowchart TD
 * **Model:** TabPFNRegressor and Boosting regressors (TabPFN / LightGBM / XGBoost)
 * **Output:** `ltv_pred ∈ ℝ₊`
 
-### Why Two Heads?
+**Why Two Heads?**
 
 * High- and low-value payers follow **fundamentally different** behavior patterns.
 * Separate regressors reduce bias and improve fit on the heavy-tailed upper segment.
@@ -179,7 +180,7 @@ Below are the detailed strategies applied per stage, reflecting the content from
 
 
 
-# Stage 3 — Two‑Head Regression (High‑value / Low‑value)
+# Stage 3 — Regression (High‑value / Low‑value)
 
 ### **Model Architecture**
 
