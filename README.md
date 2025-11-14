@@ -2,9 +2,9 @@
 
 Our work targets two core challenges in game monetization modeling:
 
-**1. Predicting long-term LTV using only early-stage logs** (launch-period behavior → lifetime value).
+**1. Predicting long-term LTV using only early logs after launching** (launch-period behavior → lifetime value).
 
-**2. Accurately modeling ultra high-value payers** whose spending dominates overall revenue distribution.
+**2. Accurately predicting LTV for extremely high-value payers** whose spending dominates overall revenue distribution.
 
 These goals shape the entire architecture of our 3-stage pipeline, enabling robust prediction in extremely imbalanced, heavy-tailed spending environments. (3-Stage Architecture)
 
@@ -34,40 +34,46 @@ This architecture enables the model to focus on progressively smaller—and more
 # Pipeline Architecture
 
 ```mermaid
-flowchart LR
-    %% Direction
-    A[Raw Player Logs<br/>First 5 Days After Launch] --> B[Feature Engineering<br/>Aggregation]
+flowchart TD
+    A[Raw Player Logs<br/>First 5 Days After Launch]
+    B[Feature Engineering<br/>Aggregation]
+    A --> B
 
     %% Stage 1
-    B --> S1[Stage 1 Payer Classification<br/>CatBoost LightGBM XGBoost]
-    S1 -->|Non Payer 0| NP[Non Payer Segment<br/>LTV Baseline]
-    S1 -->|Payer 1| S2[Stage 2 High Value Classification<br/>CatBoost LightGBM TabPFNClassifier]
+    S1[Stage 1 Payer Classification<br/>CatBoost LightGBM XGBoost]
+    B --> S1
+    NP[Non Payer Segment<br/>LTV Baseline]
+    S2[Stage 2 High Value Classification<br/>CatBoost LightGBM TabPFNClassifier]
+    S1 -->|Non Payer 0| NP
+    S1 -->|Payer 1| S2
 
     %% Stage 2
-    S2 -->|Low Spender| R_low[Stage 3B Low Value Regressor<br/>LightGBM XGBoost TabPFNRegressor]
-    S2 -->|High Spender Whale| R_high[Stage 3A High Value Regressor]
+    R_low[Stage 3B Low Value Regressor<br/>LightGBM XGBoost TabPFNRegressor]
+    R_high[Stage 3A High Value Regressor]
+    S2 -->|Low Spender| R_low
+    S2 -->|High Spender Whale| R_high
 
     %% Final Output
-    R_low --> OUT[Final LTV Prediction]
+    OUT[Final LTV Prediction]
+    R_low --> OUT
     R_high --> OUT
 
-    %% Optimization Notes
-    subgraph STAGE1[Stage 1 Tuning]
-        T1[Optuna PR AUC Tuning<br/>Cutoff Strategy Prior vs Reweight<br/>Selected By F1 Maximization]
+    %% Tuning
+    subgraph Stage1_Tuning
+        T1[Optuna PR AUC Tuning<br/>Cutoff Prior vs Reweight<br/>Selected By F1]
     end
-
-    subgraph STAGE2[Stage 2 Tuning]
-        T2[Optuna PR AUC and F Beta Tuning<br/>Recall Focus For High Value Users]
+    subgraph Stage2_Tuning
+        T2[Optuna PR AUC and F Beta Tuning<br/>Recall Focus On Whales]
     end
-
-    subgraph STAGE3[Stage 3 Tuning]
-        T3[Optuna MAE Minimization<br/>Separate Heads For High and Low Segments]
+    subgraph Stage3_Tuning
+        T3[Optuna MAE Minimization<br/>Separate Heads]
     end
 
     S1 -. tuning .-> T1
     S2 -. tuning .-> T2
     R_low -. tuning .-> T3
     R_high -. tuning .-> T3
+
 ```
 
 
