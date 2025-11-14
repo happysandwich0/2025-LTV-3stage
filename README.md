@@ -11,7 +11,6 @@ These goals shape the entire architecture of our 3-stage pipeline, enabling robu
 This project implements a **three-stage machine learning pipeline** designed to predict **Lifetime Value (LTV)** of Kakao Games users. The pipeline is optimized for highly imbalanced spending distributions and leverages both classification and regression models in a hierarchical structure.
 
 
----
 
 # Project Overview
 
