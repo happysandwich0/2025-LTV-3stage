@@ -88,9 +88,6 @@ flowchart TD
 * **Model:** Boosting model (LightGBM / XGBoost / CatBoost)
 * **Input:** 5 days log data after launching game (including 10 months PAY_AMT_SUM column for training)
 * **Output:** `payer_pred ∈ {0,1}`
-
-**Key Notes**
-
 * Handles heavy class imbalance using stratified splits & weighted loss.
 * Outputs predictions used to filter data for Stage 2.
 
@@ -103,9 +100,6 @@ flowchart TD
 * **Model:** TabPFNClassifier and Boosting classifier (TabPFN / LightGBM / XGBoost)
 * **Input:** Subset of users predicted as payers in Stage 1
 * **Output:** `high_value_pred ∈ {0,1}`
-
-**Key Notes**
-
 * Cutoff for defining high-value payers is based on top-percentile spend (top 5%).
 * Important for directing users to the correct regression head.
 
@@ -121,9 +115,6 @@ flowchart TD
 * **Input:** Segmented output from Stage 2
 * **Model:** TabPFNRegressor and Boosting regressors (TabPFN / LightGBM / XGBoost)
 * **Output:** `ltv_pred ∈ ℝ₊`
-
-**Why Two Heads?**
-
 * High- and low-value payers follow **fundamentally different** behavior patterns.
 * Separate regressors reduce bias and improve fit on the heavy-tailed upper segment.
 
@@ -132,72 +123,37 @@ flowchart TD
 
 # Tuning and Optimization Strategy
 
-Below are the detailed strategies applied per stage, reflecting the content from the attached images.
+## Stage 1 — Payer Classification (Non‑payer vs Payer)
 
-
-
-# Stage 1 — Payer Classification (Non‑payer vs Payer)
-
-### **Model Ensemble**
-
-* CatBoost + LightGBM + XGBoost (boosting ensemble)
-
-### **Hyperparameter Tuning**
-
-* **Optuna tuning using PR‑AUC** as the primary optimization metric (due to extreme imbalance)
-* Exploration of two cutoff strategies:
-
-  * **prior** cutoff
-  * **reweight** cutoff
+* Model Ensemble: CatBoost + LightGBM + XGBoost (boosting ensemble)
+* Hyperparameter Tuning: **Optuna tuning using PR‑AUC** as the primary optimization metric (due to extreme imbalance)
+* Exploration of two cutoff strategies: **prior** cutoff, **reweight** cutoff
 * Strategy automatically selected based on **F1 maximization**
-
-### **Ensembling**
-
-* **Hard voting** used for select final models at each seed
+*Ensembling: **Hard voting** used for select final models at each seed
 
 
 
-# Stage 2 — High-value (Whale) Classification
+## Stage 2 — High-value (Whale) Classification
 
-### **Data Filtering**
-
-* Only *payers predicted by Stage 1* are used
+* Data Filtering: Only payers predicted by Stage 1 are used
 * Whale cutoff = **top 5% of spenders** based on training distribution
-
-### **Model Ensemble**
-
-* CatBoost + LightGBM + TabPFNClassifier
-
-### **Hyperparameter Tuning**
-
-* Same two‑strategy tuning as Stage 1 (**prior vs reweight**)
+* Model Ensemble: CatBoost + LightGBM + TabPFNClassifier
+* Hyperparameter Tuning: Same two‑strategy tuning as Stage 1 (**prior vs reweight**)
 * Optuna tuning based on **PR‑AUC**
 * Whale classifier specifically optimized using **F‑BETA** (β > 1) to emphasize recall of high‑value users
-
-### **Ensembling**
-
-* **Hard voting** used for select final models at each seed
+* Ensembling: **Hard voting** used for select final models at each seed
 
 
 
-# Stage 3 — Regression (High‑value / Low‑value)
+## Stage 3 — Regression (High‑value / Low‑value)
 
-### **Model Architecture**
-
-* CatBoost + LightGBM + TabPFNRegressor
+* Model Architecture: CatBoost + LightGBM + TabPFNRegressor
 * Two completely separate regressors trained:
-
   * High‑value regressor
   * Low‑value regressor
-
-### **Loss Function & Optimization**
-
-* All regressors trained to directly minimize **MAE (L1 Loss)**
+* Loss Function & Optimization: All regressors trained to directly minimize **MAE (L1 Loss)**
 * Optuna tuning using **MAE minimization objective**
-
-### **Ensembling Strategy**
-
-* At each seed, predictions averaged via **mean or weighted mean**
+* Ensembling Strategy: At each seed, predictions averaged via **mean or weighted mean**
 
 
 
