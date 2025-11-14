@@ -1,0 +1,15 @@
+numpy
+pandas
+pyarrow  
+joblib  
+typing   
+
+scikit-learn  
+lightgbm     
+catboost    
+torch     
+tabpfn<6.0   
+
+optuna 
+
+tqdm         

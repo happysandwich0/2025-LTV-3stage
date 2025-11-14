@@ -1,0 +1,28 @@
+# Stage 2 (Whale Classification) Unified Pipeline 실행에 필요한 패키지 목록
+
+# 1. Core Data Manipulation and I/O
+numpy
+pandas
+pyarrow  # Parquet 파일 처리를 위해 필요
+joblib   # 모델 및 아티팩트 저장/로드를 위해 필요
+
+# 2. Machine Learning Libraries
+scikit-learn  # train_test_split, 다양한 metrics (AP, F-beta, precision_recall_curve)
+lightgbm      # LightGBM 모델
+catboost      # CatBoost 모델
+torch         # GPU 장치 확인 및 TabPFN 종속성
+
+# 3. Hyperparameter Optimization
+optuna
+optuna-integration[lightgbm]
+tqdm          # (Optional, but often a dependency of Optuna or other libs)
+
+# 4. Visualization (Diagnostic Plots)
+matplotlib
+
+# 5. Tabular Transformer Model (TabPFN) - Optional, but recommended to install
+# Note: TabPFN 설치는 종종 복잡할 수 있으며, PyPI 또는 GitHub에서 직접 설치해야 할 수 있습니다.
+# 만약 설치가 실패하면 data_preprocessing.py에서 경고와 함께 스킵됩니다.
+# 아래 패키지는 TabPFN의 일반적인 종속성입니다.
+tabpfn 
+GPyTorch
