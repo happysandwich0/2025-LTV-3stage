@@ -1,4 +1,4 @@
-# Kakao Games LTV Prediction Pipeline (3-Stage Architecture)
+# Kakao Games LTV Prediction Pipeline
 
 Our work targets two core challenges in game monetization modeling:
 
@@ -28,7 +28,7 @@ To address this, we use a **3-stage cascading pipeline**:
 
 This architecture enables the model to focus on progressively smaller—and more meaningful—subsets of the population for more accurate LTV estimation.
 
----
+
 
 # Pipeline Architecture
 
@@ -76,7 +76,7 @@ flowchart TD
 ```
 
 
----
+
 
 # Stage Descriptions
 
@@ -93,7 +93,7 @@ flowchart TD
 * Handles heavy class imbalance using stratified splits & weighted loss.
 * Outputs predictions used to filter data for Stage 2.
 
----
+
 
 ## **Stage 2 — High-value Payer Classification**
 
@@ -108,7 +108,7 @@ flowchart TD
 * Cutoff for defining high-value payers is based on top-percentile spend (top 5%).
 * Important for directing users to the correct regression head.
 
----
+
 
 ## **Stage 3 — Two-Head Regression**
 
@@ -127,13 +127,13 @@ flowchart TD
 * Separate regressors reduce bias and improve fit on the heavy-tailed upper segment.
 
 
----
+
 
 # Tuning and Optimization Strategy
 
 Below are the detailed strategies applied per stage, reflecting the content from the attached images.
 
----
+
 
 # Stage 1 — Payer Classification (Non‑payer vs Payer)
 
@@ -154,7 +154,7 @@ Below are the detailed strategies applied per stage, reflecting the content from
 
 * **Hard voting** used for select final models at each seed
 
----
+
 
 # Stage 2 — High-value (Whale) Classification
 
@@ -177,7 +177,7 @@ Below are the detailed strategies applied per stage, reflecting the content from
 
 * **Hard voting** used for select final models at each seed
 
----
+
 
 # Stage 3 — Two‑Head Regression (High‑value / Low‑value)
 
@@ -199,7 +199,6 @@ Below are the detailed strategies applied per stage, reflecting the content from
 * At each seed, predictions averaged via **mean or weighted mean**
 
 
----
 
 # Summary of Optimization Methods
 
