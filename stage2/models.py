@@ -1,8 +1,5 @@
-# models.py
-
 """
 Stage 2 Model Tuning, Training, and Diagnostic Plotting.
-(데이터 사이즈 및 Whale 희소도에 맞게 Search Space 보수적으로 조정한 버전)
 """
 import logging
 import os
@@ -36,19 +33,14 @@ def tune_lgbm_cls(
     y_tr,
     X_va,
     y_va,
-    stage_key: str,
-    strategy: str,
-    train_pos_prior: float,
-    trials: int,
-    current_seed: int,  # 💡 SEED 인수를 직접 받도록 수정
-) -> Dict[str, Any]:
+    stage_key,
+    strategy,
+    train_pos_prior,
+    trials,
+    current_seed
+    ):
     """
     LightGBM Binary Classifier Tuning for Stage 2.
-
-    Search space는 다음 전제에 맞게 보수적으로 설정:
-    - Train ~5.4k / Val ~1.8k / feature ~85
-    - Whale 상위 5% (희소 타겟)
-    - 과도한 깊이/리프 수를 제한해 과적합과 탐색 낭비 방지
     """
 
     bounds = dict(
@@ -87,7 +79,7 @@ def tune_lgbm_cls(
                 "reg_lambda", *bounds["reg_lambda"]
             ),
             objective="binary",
-            random_state=current_seed, # 💡 전달받은 seed 사용
+            random_state=current_seed,
             n_jobs=max(1, (os.cpu_count() or 8) // 4),
             verbosity=-1,
             force_row_wise=True,
@@ -95,7 +87,6 @@ def tune_lgbm_cls(
 
         # 클래스 불균형 대응 (reweight 전략)
         if strategy == "reweight":
-            # 양성(whale)을 더 중요하게 보도록 가중
             w_neg = (len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1)
             if REWEIGHT_BY_FBETA:
                 w_neg *= (F_BETA ** 2)
@@ -114,7 +105,6 @@ def tune_lgbm_cls(
         )
 
         proba = model.predict_proba(X_va)[:, 1]
-        # 최종 평가는 Stage2 목적 함수(보통 PR-AUC+F_beta 조합)
         return score_stage2_objective(y_va, proba)
 
     study = optuna.create_study(
@@ -138,8 +128,6 @@ def tune_lgbm_cls(
             force_row_wise=True,
         )
     )
-
-    # 🔧 최종 반환 파라미터에 reweight 반영 (여기서는 'best'에 넣어야 함)
     if strategy == "reweight":
         # 양성(whale) 희소성에 맞춘 class_weight
         w_pos = (len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1)
@@ -161,16 +149,15 @@ def tune_cat_cls(
     X_va,
     y_va,
     cat_cols_idx,
-    stage_key: str,
-    strategy: str,
-    train_pos_prior: float,
+    stage_key,
+    strategy,
+    train_pos_prior,
     trials: int,
-    current_seed: int, # 💡 SEED 인수를 직접 받도록 수정
-) -> Dict[str, Any]:
+    current_seed,
+):
     """
     CatBoost Tuning for Stage 2.
 
-    Search space를 데이터 크기와 희소 타겟을 고려해 조정:
     - iterations: 300–900
     - depth: 4–8
     - learning_rate: 0.02–0.12
@@ -199,7 +186,7 @@ def tune_cat_cls(
             ),
             loss_function="Logloss",
             eval_metric="PRAUC",
-            random_seed=current_seed, # 💡 전달받은 seed 사용
+            random_seed=current_seed, 
             verbose=0,
         )
 
@@ -236,7 +223,7 @@ def tune_cat_cls(
         dict(
             loss_function="Logloss",
             eval_metric="PRAUC",
-            random_seed=current_seed, # 💡 전달받은 seed 사용
+            random_seed=current_seed,
             verbose=0,
         )
     )
@@ -256,13 +243,13 @@ def tune_cat_cls(
 # Plotting Functions (Diagnostics)
 # =============================================================================
 def plot_lgbm_error_trajectory(
-    Xtr: pd.DataFrame,
-    y_tr: pd.Series,
-    Xva: pd.DataFrame,
-    y_va: pd.Series,
-    best_lgb_params: dict,
-    output_dir: Path,
-    current_seed: int,
+    Xtr,
+    y_tr,
+    Xva,
+    y_va,
+    best_lgb_params,
+    output_dir,
+    current_seed,
 ):
     """LGBM의 VAL PR-AUC Error 궤적 플롯."""
     if Xva.shape[1] == 0:
@@ -272,7 +259,7 @@ def plot_lgbm_error_trajectory(
     params = best_lgb_params.copy()
     n_estimators_big = params.pop("n_estimators", 900)
     params["learning_rate"] = float(params.get("learning_rate", 0.05))
-    params["random_state"] = current_seed # 💡 SEED 적용
+    params["random_state"] = current_seed 
 
     model = lgb.LGBMClassifier(**params, n_estimators=n_estimators_big)
 
@@ -371,7 +358,7 @@ def plot_cat_error_trajectory(
     n_estimators_big = params.pop("iterations", 900)
     params.pop("verbose", None)
     params["learning_rate"] = float(params.get("learning_rate", 0.05))
-    params["random_seed"] = current_seed # 💡 SEED 적용
+    params["random_seed"] = current_seed 
 
     model = CatBoostClassifier(
         **params,
@@ -460,7 +447,6 @@ def best_threshold_for_fbeta(y_true, proba, beta: float = 1.0):
     p, r, t = precision_recall_curve(y_true, proba)
     f = (1 + beta**2) * (p * r) / (beta**2 * p + r + 1e-12)
     i = int(np.nanargmax(f))
-    # sklearn의 t는 길이가 (len(p)-1)이므로 인덱스 보정
     best_thr = float(t[max(i-1, 0)])
     return best_thr, float(f[i])
 
