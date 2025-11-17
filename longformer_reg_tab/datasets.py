@@ -5,7 +5,6 @@ from functools import partial
 from utils import encode_sequence, PIN_MEMORY, transform_target, inverse_transform_target, load_seq_parquet
 import numpy as np
 
-# datasets.py의 collate_batch 함수 (우측 패딩 적용)
 def collate_batch(batch, max_len=None):
     ids = [b["ids"] for b in batch]
     labels = torch.tensor([b["labels"] for b in batch], dtype=torch.float)
@@ -34,7 +33,6 @@ def collate_batch(batch, max_len=None):
 
     for i, b_ids in enumerate(trimmed_input_ids):
         l = len(b_ids)
-        # 우측 패딩: 시퀀스를 왼쪽 정렬하고 나머지를 0으로 채움
         input_ids[i, :l] = b_ids
         attn_mask[i, :l] = 1
         global_mask[i, :l] = trimmed_global_masks[i]
@@ -48,7 +46,6 @@ def collate_batch(batch, max_len=None):
         "tabular_features": tabular_features,
     }
 
-# collate_infer 함수 수정: 마찬가지로 우측 패딩 적용
 def collate_infer(batch, max_len=None):
     ids = [b["ids"] for b in batch]
     tabular_features = torch.tensor([b["tabular_features"] for b in batch], dtype=torch.float)
@@ -94,7 +91,6 @@ class SeqDataset(Dataset):
                  global_tokens: list = None, transformation_mode='log1p', tabular_data=None):
         self.id = df[id_col].tolist()
         
-        # 타겟 변수 변환을 utils 함수로 분리
         self.y_raw = df[y_col].astype(float).values
         self.y, self.transform_params = transform_target(self.y_raw, transformation_mode)
         
@@ -115,15 +111,10 @@ class SeqDataset(Dataset):
         if self.max_len is not None and len(ids) > self.max_len:
             ids = ids[-self.max_len:]
         
-        # ========== 수정된 부분: global_attention_mask 생성 로직 ==========
         global_id_set = {self.stoi[ev] for ev in self.global_tokens if ev in self.stoi}
-        # ids와 동일한 크기의 0으로 채워진 텐서를 만듭니다.
         global_mask = torch.zeros(ids.size(), dtype=torch.long)
-        # ids에 있는 각 토큰이 global_id_set에 포함되는지 확인하여 마스크를 설정합니다.
         global_mask[torch.isin(ids, torch.tensor(list(global_id_set)))] = 1
-        # =========================================================
 
-        # 태블러 데이터 추가
         player_id = self.id[i]
         if self.tabular_data is not None:
             tabular_features = self.tabular_data.loc[player_id].values.astype(np.float32)
@@ -166,7 +157,6 @@ class SeqDatasetInfer(Dataset):
             if token.item() in global_id_set:
                 global_mask[gi] = 1
         
-        # 태블러 데이터 추가
         player_id = self.id[i]
         if self.tabular_data is not None:
             tabular_features = self.tabular_data.loc[player_id].values.astype(np.float32)
