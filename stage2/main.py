@@ -30,11 +30,6 @@ from catboost import CatBoostClassifier, Pool
 import lightgbm as lgb
 
 def feature_drop_cols():
-    """
-    모델 입력 생성 시 항상 제거할 컬럼(타깃/ID/Stage1 결과 등)만 명시.
-    TVT 컬럼(stage1_tvt, stage2_tvt)은 build_features 호출 '직전'에
-    errors='ignore'로 미리 드롭하고, 여기에는 넣지 않는다.
-    """
     return [ID_COL, TARGET_COL, PRED_PAYER_COL]
 
 import config
@@ -66,12 +61,12 @@ from models import (
 # Single ensemble utility
 # -----------------------------
 def ensemble(
-    scores,                     # dict[str, np.ndarray] or 2D np.ndarray (n, k)
-    mode: str = "soft",         # "soft" or "hard"
+    scores,             
+    mode: str = "soft",        
     *, 
-    cutoffs=None,               # hard: dict[str,float] or scalar; soft: ignored
-    weights=None,               # dict[str,float] or 1D array length k
-    threshold: float | None = None  # soft: optional final threshold to directly get labels
+    cutoffs=None,      
+    weights=None,         
+    threshold: float | None = None 
   ):
     if isinstance(scores, dict):
         keys = list(scores.keys())
