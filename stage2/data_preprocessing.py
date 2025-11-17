@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import warnings
 
-# config에서 상수 직접 로드
 from config import (
     ID_COL, 
     PRED_PAYER_COL, 
@@ -61,12 +60,11 @@ def build_features(df, target_col, drop_cols):
     """
     drop_cols_no_id = [c for c in drop_cols if c != ID_COL]
 
-    # 기본 제외 대상
     additional_drop = [c for c in [PRED_PAYER_COL, STAGE1_PROBA_COL] if c in df.columns]
     cols = [c for c in df.columns if c not in drop_cols_no_id and c not in additional_drop]
     X = df[cols].copy()
 
-    # --- ① proba 컬럼 제거 (config 옵션 기반) ---
+    # --- ① proba 컬럼 제거 ---
     if EXCLUDE_PROBA_FEATURES:
         proba_cols = [c for c in X.columns if "proba" in c.lower()]
         if proba_cols:
@@ -88,7 +86,6 @@ def build_features(df, target_col, drop_cols):
 
 
 def fit_imputer(train_df):
-    """수치형 변수의 중앙값(median)을 계산"""
     num_cols = [
         c for c in train_df.columns
         if train_df[c].dtype != 'object'
