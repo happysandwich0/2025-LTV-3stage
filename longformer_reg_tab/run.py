@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-# utils.py에서 필요한 모든 함수 및 변수를 임포트합니다.
 from utils import (
     setup_logger,
     get_device,
@@ -42,16 +41,13 @@ from models import LongformerRegressor
 
 from config import HP
 
-# ========== 로거 및 경로 설정 ==========
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 log_file_path = os.path.join(os.path.dirname(__file__), f"logs/training_{timestamp}.log")
 logger = setup_logger("main_logger", log_file_path)
 output_dir = os.path.join("outputs", timestamp)
-# =========================================================
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-# ========== 전역 예외 처리 후크 추가 ==========
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -59,9 +55,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     logger.critical("Uncaught exception:", exc_info=(exc_type, exc_value, exc_traceback))
 
 sys.excepthook = handle_exception
-# =========================================================
 
-# notebook에서 사용된 OrdinalCategoryEncoder 클래스를 여기에 추가
 class OrdinalCategoryEncoder:
     def __init__(self):
         self.maps: Dict[str, Dict] = {}
@@ -87,7 +81,7 @@ class OrdinalCategoryEncoder:
 def train_one(train_df, valid_df, stoi, max_len=None, batch_size=512, epochs=12, patience=3,
               d_model=96, nhead=4, nlayers=2, lr=3e-4, wd=1e-4, y_col='PAY_AMT',
               base_rate=0.03675, verbose=True, save_dir="checkpoints/seq_cls", run_name="default",
-              resume=False, global_tokens=['그로아', '캐시 상점', '스탯'], tabular_data_train=None, tabular_data_valid=None, **kwargs):
+              resume=False, global_tokens=[], tabular_data_train=None, tabular_data_valid=None, **kwargs):
     
     transformation_mode = kwargs.get('transformation_mode', 'log1p')
     loss_mode = kwargs.get('loss_mode', 'mae')
@@ -101,12 +95,8 @@ def train_one(train_df, valid_df, stoi, max_len=None, batch_size=512, epochs=12,
     ckpt_last = f"{save_dir}/{run_name}_last.pt"
     ckpt_best = f"{save_dir}/{run_name}_best.pt"
 
-    # 태블러 데이터 차원 계산
-    # 'PLAYERID' 컬럼은 제외하고 차원을 계산
     tabular_input_dim = tabular_data_train.drop(columns=['PLAYERID'], errors='ignore').shape[1] if tabular_data_train is not None and not tabular_data_train.empty else 0
     
-    # SeqDataset 클래스에 전달할 때, tabular_data가 PLAYERID를 인덱스로 갖는 DataFrame임을 가정
-    # 따라서, 여기서 전달하는 tabular_data는 PLAYERID 컬럼을 가지고 있어야 함
     tr_ds = SeqDataset(train_df, stoi, y_col=y_col, max_len=max_len, global_tokens=global_tokens, transformation_mode=transformation_mode, tabular_data=tabular_data_train)
     va_ds = SeqDataset(valid_df, stoi, y_col=y_col, max_len=max_len, global_tokens=global_tokens, transformation_mode=transformation_mode, tabular_data=tabular_data_valid)
     
@@ -283,31 +273,25 @@ if __name__ == '__main__':
     TEST_MODE = False
     
     try:
-        # 태블러 데이터 로드 및 통합
         tabular_train_df_raw = pd.read_parquet('/root/sblm/3stage/data/train_df_5days.parquet')
         tabular_val_df_raw = pd.read_parquet('/root/sblm/3stage/data/val_df_5days.parquet')
         tabular_test_df_raw = pd.read_parquet('/root/sblm/3stage/data/test_df_5days.parquet')
         
-        # y_col 이름 차이를 고려하여 처리
-        # 시퀀스 데이터의 y_col은 'PAY_AMT', 태블러 데이터의 y_col은 'PAY_AMT_SUM'
         TABULAR_Y_COL = 'PAY_AMT_SUM'
         
         all_tabular_df = pd.concat([tabular_train_df_raw, tabular_val_df_raw, tabular_test_df_raw], ignore_index=True)
         
         logger.info(f"All tabular data loaded and merged. Shape: {all_tabular_df.shape}")
         
-        # 시퀀스 데이터 로드
         train_df = load_seq_parquet('./seq/train_df_5days_seq.parquet')
         val_df = load_seq_parquet('./seq/val_df_5days_seq.parquet')
         test_df = load_seq_parquet('./seq/test_df_5days_seq.parquet')
 
         logger.info("Sequence data loaded.")
         
-        # 디버깅: 컬럼 정보 출력
         logger.info(f"Columns in all_tabular_df: {list(all_tabular_df.columns)}")
         logger.info(f"Columns in train_df (sequence): {list(train_df.columns)}")
 
-        # 시퀀스 데이터의 플레이어 ID를 기준으로 태블러 데이터 분할
         all_tabular_df_indexed = all_tabular_df.set_index('PLAYERID')
         
         tabular_train_df_for_model = all_tabular_df_indexed.loc[train_df['PLAYERID']].reset_index()
@@ -316,30 +300,22 @@ if __name__ == '__main__':
 
         logger.info(f"Tabular data partitioned based on sequence data's PLAYERIDs.")
 
-        # --- OrdinalCategoryEncoder 적용 ---
-        # 문자열(object) 또는 categorical 타입의 컬럼을 식별
         cat_cols = [col for col in tabular_train_df_for_model.columns 
                     if tabular_train_df_for_model[col].dtype == 'object']
         
-        # 'NAT_CD'가 categorical 컬럼에 포함되는지 확인하는 로그
         if 'NAT_CD' in cat_cols:
             logger.info("NAT_CD column found and will be handled as a categorical feature.")
         else:
             logger.warning("NAT_CD column not found in tabular data. It may have been excluded or renamed.")
 
-        # 인코더를 훈련 데이터에 fit하고 모든 데이터에 transform 적용
         enc = OrdinalCategoryEncoder().fit(tabular_train_df_for_model, cat_cols)
         tabular_train_df_for_model = enc.transform(tabular_train_df_for_model)
         tabular_val_df_for_model = enc.transform(tabular_val_df_for_model)
         tabular_test_df_for_model = enc.transform(tabular_test_df_for_model)
 
-        # 모델에 전달할 피처 컬럼 목록을 생성
-        # 이 시점에는 모든 categorical 컬럼이 이미 정수형으로 변환되었음
         tabular_cols_to_use = [col for col in tabular_train_df_for_model.columns 
                                if col not in ['PLAYERID', TABULAR_Y_COL]]
         
-        # 최종 모델에 전달할 데이터프레임에는 'PLAYERID'와 피처 컬럼이 모두 포함
-        # 이 시점에 'PAY_AMT_SUM'은 제외됨
         tabular_train_df_for_model = tabular_train_df_for_model[['PLAYERID'] + tabular_cols_to_use]
         tabular_val_df_for_model = tabular_val_df_for_model[['PLAYERID'] + tabular_cols_to_use]
         tabular_test_df_for_model = tabular_test_df_for_model[['PLAYERID'] + tabular_cols_to_use]
