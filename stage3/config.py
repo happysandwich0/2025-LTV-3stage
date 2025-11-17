@@ -1,15 +1,3 @@
-# config_stage3.py
-
-"""
-Stage 3 (Final LTV Regression) Global Configuration.
-"""
-import torch
-from pathlib import Path
-from typing import List
-
-# =====================================================================================
-# ---- GLOBAL CONFIGURATION (Defaults) ---
-# =====================================================================================
 # --- Data/Column Names ---
 TARGET_COL = "PAY_AMT_SUM" # LTV 예측의 원본 목표 변수 (실제 결제 금액)
 ID_COL = "PLAYERID" # 사용자 ID 컬럼
@@ -25,13 +13,12 @@ CAT_TASK_PARAMS = {"task_type": "GPU"} if DEVICE == "cuda" else {} # CatBoost �
 # --- Global Placeholders for the Run ---
 SEED = 2025 # 단일 시드 훈련에 사용되는 기본 난수 시드 (int)
 OPTUNA_SEED = 2025 # Optuna 하이퍼파라미터 튜닝에 사용되는 난수 시드 (int)
-DEFAULT_SEEDS_STR = "2024..2025" # 멀티 시드 훈련에 사용되는 기본 시드 범위 (예: "2024,2025" 또는 "2024..2025")
+DEFAULT_SEEDS_STR = "2024..2025" # 멀티 시드 훈련에 사용되는 기본 시드 범위 
 N_JOBS = 12 # 병렬 작업자 수 (LightGBM 등에서 n_jobs로 사용됨)
 
 # --- Data/Path Configuration ---
 PROJECT_ROOT = Path(__file__).resolve().parent 
 DATA_DIR = PROJECT_ROOT.parent / "data"
-# Stage 2의 최종 결과물(전체 데이터의 Stage 2 예측 결과 포함)을 Stage 3의 입력으로 사용
 DEFAULT_INPUT_DATA_PATH = PROJECT_ROOT / "data" / "stage2_data.parquet"
 DEF_OUTPUT_DIR = PROJECT_ROOT / "stage3_results"
 
@@ -61,8 +48,7 @@ LGBM_LOSS = "rmse" # LightGBM에서 사용할 손실 함수 ("rmse", "mae", "hub
 CAT_LOSS = "RMSE" # CatBoost에서 사용할 손실 함수 ("RMSE", "MAE", "Huber" 등)
 
 
-# --- 튜닝 범위: Non-Whale Payer (LTV가 낮을 것으로 예상되는 그룹) ---
-# 비교적 모델 복잡도를 낮게 설정하여 과적합 방지
+# --- 튜닝 범위: Non-Whale Payer ---
 TUNE_NON_WHALE = {
     "lgbm": {
         "n_estimators": (400, 700), "learning_rate": (0.01, 0.1), "num_leaves": (20, 60), 
@@ -75,8 +61,7 @@ TUNE_NON_WHALE = {
     }
 }
 
-# --- 튜닝 범위: Whale Payer (LTV가 높을 것으로 예상되는 그룹) ---
-# 모델 복잡도를 높여 높은 분산을 학습할 수 있도록 설정
+# --- 튜닝 범위: Whale Payer ---
 TUNE_WHALE = {
     "lgbm": {
         "n_estimators": (600, 1000), "learning_rate": (0.01, 0.15), "num_leaves": (50, 127), 
