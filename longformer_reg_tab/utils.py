@@ -34,7 +34,6 @@ def set_seed(seed=2025):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-# --- 유틸리티 함수 ---
 def ensure_dir(p: str):
     pathlib.Path(p).mkdir(parents=True, exist_ok=True)
 
@@ -50,7 +49,7 @@ def save_ckpt(path, model, opt, sched, epoch, best_metric, stoi, hp, transform_p
         "hp": hp,
         "device_type": DEVICE_TYPE,
         "ts": time.time(),
-        "transform_params": transform_params # 변환 파라미터 저장
+        "transform_params": transform_params 
     }
     torch.save(obj, path)
 
@@ -81,10 +80,8 @@ def build_event_vocab(df, col='ACTION_DELTA', min_freq=1, top_k=None):
     return stoi, itos
 
 def setup_logger(name, log_file, level=logging.INFO):
-    """로거를 설정하고 반환합니다."""
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    # log 파일 저장 경로를 확인하고 생성합니다.
     pathlib.Path(os.path.dirname(log_file)).mkdir(parents=True, exist_ok=True)
     
     handler = logging.FileHandler(log_file)        
@@ -118,7 +115,6 @@ def load_seq_parquet(path, seq_col='ACTION_DELTA'):
 def class_balanced_mae_loss(logits, targets, beta=0.999):
     """
     클래스 불균형을 고려한 평균 절대 오차(MAE) 손실 함수.
-    이진 분류의 클래스 가중치를 회귀 문제에 적용합니다.
     """
     targets_binary = (targets > 0).float()
     n_pos = targets_binary.sum().clamp(min=1.0)
@@ -134,10 +130,6 @@ def class_balanced_mae_loss(logits, targets, beta=0.999):
     return (w * mae).mean()
 
 def evaluate_reg(y_true, y_pred):
-    """
-    회귀 모델의 성능 지표를 계산합니다.
-    (RMSE, MAE, R2 score 포함)
-    """
     metrics = {}
     metrics['MAE'] = mean_absolute_error(y_true, y_pred)
     metrics['RMSE'] = np.sqrt(mean_squared_error(y_true, y_pred))
@@ -145,38 +137,28 @@ def evaluate_reg(y_true, y_pred):
     return metrics
 
 def transform_target(y, mode, params=None):
-    """타겟 변수를 지정된 모드로 변환하고, 변환 파라미터를 반환합니다."""
     if mode == 'log1p':
         return np.log1p(y), None
     elif mode == 'box_cox':
-        # Box-Cox 변환은 양수 데이터에만 적용 가능 (y > 0)
-        # 0이 포함된 경우 데이터에 1을 더해서 변환합니다.
-        # 변환된 값과 람다(lambda) 값을 반환합니다.
-        # np.log1p와 np.expm1를 사용하지 않는다면 0을 처리하는 방법을 정의해야 합니다.
         y_trans, lam = boxcox(y + 1e-6)
         return y_trans, {'lambda': lam}
     elif mode == 'yeo_johnson':
-        # Yeo-Johnson 변환은 음수, 양수, 0을 모두 처리할 수 있습니다.
         y_trans, lam = yeojohnson(y)
         return y_trans, {'lambda': lam}
     else:
         return y, None
 
 def inverse_transform_target(y_transformed, mode, params):
-    """변환된 타겟 변수를 원래 스케일로 되돌립니다."""
     if mode == 'log1p':
         return np.expm1(y_transformed)
     elif mode == 'box_cox':
         lam = params.get('lambda')
-        # 변환된 값과 람다(lambda) 값을 반환합니다.
-        # 0이 포함된 경우 데이터에 1을 더해서 변환합니다.
         if lam == 0:
             return np.exp(y_transformed) - 1e-6
         else:
             return (y_transformed * lam + 1)**(1/lam) - 1e-6
     elif mode == 'yeo_johnson':
         lam = params.get('lambda')
-        # 음수, 양수, 0을 모두 처리
         return np.where(y_transformed >= 0, (y_transformed * lam + 1)**(1/lam) - 1e-6 if lam != 0 else np.exp(y_transformed) - 1e-6, 
                         (2 - (2 - lam * y_transformed)**(1/(2-lam)))/lam if lam != 2 else np.log(y_transformed + 1) / (-1))
     else:
