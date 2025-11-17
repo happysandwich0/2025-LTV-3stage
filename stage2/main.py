@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
 Stage 2 Unified Pipeline Core Logic (with single ensemble() utility).
 - Config-driven (no CLI parsing).
