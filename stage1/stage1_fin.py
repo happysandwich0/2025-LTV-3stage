@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 LTV Prediction Pipeline - Stage 1 Final Training & Prediction (PATCHED)
 
@@ -8,11 +5,6 @@ LTV Prediction Pipeline - Stage 1 Final Training & Prediction (PATCHED)
   * Save artifacts: encoder, imputer, feat_order, cat_cols_idx, cutoffs, models (joblib + native)
 - Phase 2: Predict payer for (train+val+test), apply fixed cutoffs + hard voting.
   * Save columns: original + pred_is_payer + per-model proba + stage1_proba(mean)
-
-Key patches:
-  1) Preserve feature order between train and predict via manifest feat_order.
-  2) Save native model files (lgbm.txt, xgb.json, cat.cbm) for portability.
-  3) Load manifest in prediction and reindex columns accordingly.
 """
 
 import os
@@ -38,13 +30,13 @@ import xgboost as xgb
 
 import torch
 
-from sklearn.metrics import precision_score  # (미사용 가능) 컷오프 고정이라 남겨둠
+from sklearn.metrics import precision_score 
 
 # =====================================================================================
 # ---- 1. CONFIGURATION & PATHS
 # =====================================================================================
 
-SCRIPT_DIR = Path.cwd()  # __file__ 미보장 환경 대응
+SCRIPT_DIR = Path.cwd()
 DATA_DIR = SCRIPT_DIR.parent / "Data"
 
 ARTIFACTS_DIR = SCRIPT_DIR / "final_stage1_artifacts"
@@ -63,25 +55,11 @@ DATA_PATHS = {
 
 TARGET_COL = "PAY_AMT_SUM"
 ID_COL = "PLAYERID"
-FINAL_SEED = 2021  # 대표 시드
+FINAL_SEED = 2021  
 
-# --- Data Loading ---
-action_trash_list = ['길드_하우스 대여', '캐시 상점_아이템 삭제', '길드_가입 신청', '계정_로그인', '클래스_잠금',
-                     '길드_설정 변경', '성장_레벨 다운', '성장_스킬 습득', '그로아_소환 확정 대기 변경', '아이템 컬렉션_추가',
-                     '그로아_소환', '탈것_스킬 설정', '퀘스트_보상 미리보기 삭제', '캐시 상점_아이템 추가', '길드_생성', '제작_제작',
-                     '클래스_소환 확정 대기 생성', '계정_로그아웃', '길드_적대 등록 취소', '길드_등급', '길드_동맹 신청 취소', '보스전_필드 보스',
-                     '길드_동맹 신청', '탈것_추가', '탈것_소환 확정 대기 변경', '퀘스트_포기', '그로아_소환 확정 대기 생성', '성장_레벨 업',
-                     '캐시 상점_월드 추가', '사망 불이익_경험치', '캐시 상점_캐시 상점에서 재화로 구매', '퀘스트_보상 미리보기', '캐릭터_생성',
-                     '클래스_소환 확정 대기 변경', '길드_적대 등록', '던젼_충전', '스탯_설정', '기믹_등짐', '클래스_소환 확정 대기 삭제', '그로아_소환 확정 대기 삭제',
-                     '성장_상태 변화 습득', '성장_죽음', '제작_추가', '퀘스트_의뢰 갱신', '길드_지원자 제거', '캐시 상점_캐릭터 추가', '길드_동맹 파기', '워프_갱신',
-                     '워프_삭제', '클래스_추가', '길드_가입', '길드_동맹 신청 확인', '보스전_월드 보스', '퀘스트_완료', '길드_해체', '탈것_잠금', '캐시 상점_계정 추가',
-                     '워프_생성', '워프_순간이동 사용', '성장_경험치 손실', '퀘스트_의뢰', '퀘스트_수락', '탈것_등록', '퀘스트_수행', '길드_경험치 획득', '그로아_잠금',
-                     '캐시 상점_구매 나이 변경', '길드_동맹 신청 거절', '탈것_소환 확정 대기 생성', '클래스_변경', '탈것_소환 확정 대기 삭제', '길드_탈퇴', '사망 불이익_아이템',
-                     '길드_출석', '그로아_추가']
+action_trash_list = []
 
-action_list = ['PLAYERID','계정', '그로아', '기믹', '길드', '던젼', '보스전',
-               '사망 불이익', '성장', '스탯', '아이템 컬렉션', '워프', '제작',
-               '캐릭터', '캐시 상점', '퀘스트', '클래스', '탈것']
+action_list = []
 
 # --- Fixed Cutoffs ---
 FINAL_CUTOFFS = {"cat": 0.2, "lgbm": 0.2, "xgb": 0.5}
@@ -480,10 +458,8 @@ def predict_stage1_on_all_data(artifacts_dir: Path, cutoffs: Dict):
         X_all_imputed = apply_imputer(X_all_encoded, num_cols_fitted, imputer_medians)
         X_all_processed = _sanitize_cols(X_all_imputed)
 
-        # 🔴 가장 중요: 학습 시 피처 순서로 강제 정렬
         X_all_processed = X_all_processed.reindex(columns=feat_order, fill_value=0)
 
-        # CatBoost에 넘길 cat_features index (feat_order 기준)
         final_cat_cols_idx = cat_cols_idx_from_manifest
 
     # 4) Predict proba
@@ -500,7 +476,6 @@ def predict_stage1_on_all_data(artifacts_dir: Path, cutoffs: Dict):
 
     # 6) Merge & Save
     with SectionTimer("Merging predictions with original data and saving"):
-        # 평균 확률(ensemble soft ref): Stage2 라우팅 지표로 활용
         stage1_proba = (proba["lgbm"] + proba["xgb"] + proba["cat"]) / 3.0
 
         pred_df = pd.DataFrame({
