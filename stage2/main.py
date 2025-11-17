@@ -32,10 +32,7 @@ from sklearn.metrics import (
 from catboost import CatBoostClassifier, Pool
 import lightgbm as lgb
 
-# -----------------------------
-# Safe util (global)
-# -----------------------------
-def feature_drop_cols() -> list:
+def feature_drop_cols():
     """
     모델 입력 생성 시 항상 제거할 컬럼(타깃/ID/Stage1 결과 등)만 명시.
     TVT 컬럼(stage1_tvt, stage2_tvt)은 build_features 호출 '직전'에
@@ -43,9 +40,6 @@ def feature_drop_cols() -> list:
     """
     return [ID_COL, TARGET_COL, PRED_PAYER_COL]
 
-# -----------------------------
-# Config & helpers (from user's project)
-# -----------------------------
 import config
 from config import (
     TARGET_COL, ID_COL, PRED_PAYER_COL,
@@ -72,7 +66,7 @@ from models import (
 )
 
 # -----------------------------
-# New: Single ensemble utility
+# Single ensemble utility
 # -----------------------------
 def ensemble(
     scores,                     # dict[str, np.ndarray] or 2D np.ndarray (n, k)
@@ -81,15 +75,7 @@ def ensemble(
     cutoffs=None,               # hard: dict[str,float] or scalar; soft: ignored
     weights=None,               # dict[str,float] or 1D array length k
     threshold: float | None = None  # soft: optional final threshold to directly get labels
-):
-    """
-    One-stop ensemble (soft/hard) for model-ensemble and seed-ensemble.
-    Returns:
-      proba_ref: np.ndarray (soft: weighted prob; hard: mean prob for reference)
-      yhat:      np.ndarray or None (if threshold is None in soft mode)
-    """
-    import numpy as _np
-
+  ):
     if isinstance(scores, dict):
         keys = list(scores.keys())
         M = _np.column_stack([_np.asarray(scores[k]).ravel() for k in keys])
@@ -280,8 +266,6 @@ def load_and_split_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 # Single-seed train
 # -----------------------------
 def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
-    # 기존: config.SEED = train_seed; config.OPTUNA_SEED = train_seed
-    # 💡 수정: OPTUNA_SEED 재할당 코드를 제거했습니다.
     np.random.seed(train_seed)
     random.seed(train_seed)
 
@@ -393,7 +377,6 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
                     models = {}; preds = {}; cutoffs = {}
 
                     if not NO_CATBOOST:
-                        # train_seed 명시적 전달
                         cat_params = tune_cat_cls(Xtr, y_tr, Xva, y_va, cat_cols_idx, "stage2", strat, pos_prior, DEFAULT_TRIALS, train_seed)
                         best_cat_params = cat_params
                         cat2 = CatBoostClassifier(**cat_params, **CAT_TASK_PARAMS, od_type="Iter", od_wait=200)
@@ -405,7 +388,6 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
                         models["cat"], preds["cat"], cutoffs["cat"] = cat2, p_cat, t_cat
 
                     if not NO_LGBM:
-                        # train_seed 명시적 전달
                         lgb_params = tune_lgbm_cls(Xtr, y_tr, Xva, y_va, "stage2", strat, pos_prior, DEFAULT_TRIALS, train_seed)
                         best_lgb_params = lgb_params
                         lgbm2 = lgb.LGBMClassifier(**lgb_params)
@@ -475,10 +457,8 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
 
         try:
             if not NO_LGBM and best_lgb_params and best["models"].get("lgbm"):
-                # train_seed 명시적 전달
                 plot_lgbm_error_trajectory(Xtr, y_tr, Xva, y_va, best_lgb_params, output_dir, train_seed)
             if not NO_CATBOOST and best_cat_params and best["models"].get("cat"):
-                # train_seed 명시적 전달
                 plot_cat_error_trajectory(Xtr, y_tr, Xva, y_va, cat_cols_idx, best_cat_params, output_dir, train_seed)
         except Exception as e:
             logging.error(f"⚠️ Plot generation failed (non-critical): {e}", exc_info=True)
@@ -828,16 +808,13 @@ def run_stage2_multi_core():
         weights = _np.array(weights, dtype=float)
         if weights.sum() <= 0: weights = _np.ones_like(weights)
         weights = weights / weights.sum()
-        
-        # --- [추가] 개별 시드 예측 레이블을 최종 DataFrame에 통합하기 위해 전처리 ---
-        # yhat_stage2 컬럼만 선택하고, 컬럼명을 'pred_is_high_payer_{seed}'로 변경하여 리스트에 저장
+       
         yhat_seed_dfs = []
         for df, s in zip(all_pred_dfs, seeds_used):
             df_yhat = df[[ID_COL, "yhat_stage2"]].copy()
             df_yhat = df_yhat.rename(columns={"yhat_stage2": f"pred_is_high_payer_{s}"})
             df_yhat_seed_indexed = df_yhat.set_index(ID_COL)
             yhat_seed_dfs.append(df_yhat_seed_indexed)
-        # ------------------------------------------------------------------
 
     # Aggregate across seeds
     with SectionTimer("Aggregating Ensemble Probabilities (ALL Data)"):
@@ -882,14 +859,13 @@ def run_stage2_multi_core():
         else:
             agg_all = all_df_proba.groupby(id_col_local, as_index=False).apply(agg_hard).reset_index(drop=True)
         
-        # --- [추가] 개별 시드 예측 레이블 컬럼을 agg_all에 병합 ---
         agg_all = agg_all.set_index(ID_COL)
         for df_yhat_seed in yhat_seed_dfs:
              # ID_COL을 인덱스로 사용하여 join
              agg_all = agg_all.join(df_yhat_seed, how="left")
         agg_all = agg_all.reset_index()
-        # ----------------------------------------------------------
 
+ 
     with SectionTimer("Final Threshold Tuning (ALL Data)"):
         if "yhat_seed_vote" in agg_all.columns:
             y_true = agg_all["IS_WHALE_true"].values
@@ -940,9 +916,7 @@ def run_stage2_multi_core():
             }
 
         with SectionTimer("Saving Final Ensemble Parquet File"):
-            # 필요한 컬럼만 선택
             parquet_cols = ["proba_seed_ensemble", "pred_seed_ensemble"]
-            # 개별 시드 예측 레이블 컬럼을 동적으로 추가
             for s in seeds_used:
                 parquet_cols.append(f"pred_is_high_payer_{s}")
             
@@ -951,13 +925,11 @@ def run_stage2_multi_core():
                 "pred_seed_ensemble": "pred_is_high_payer"
             })[parquet_cols]
             
-            # 최종 컬럼명 재조정
             rename_map = {
                 "stage2_proba": "stage2_proba",
                 "pred_is_high_payer": "pred_is_high_payer",
             }
             for s in seeds_used:
-                # 요청에 따라 컬럼명을 'stage2_is_whale_{seed}'로 설정
                 rename_map[f"pred_is_high_payer_{s}"] = f"stage2_is_whale_{s}"
             
             agg_all_indexed = agg_all_indexed.rename(columns=rename_map)
@@ -969,7 +941,6 @@ def run_stage2_multi_core():
                 df_base_full = df_base_full.set_index(ID_COL, drop=False)
 
             final_output_df = df_base_full.copy()
-            # join 시 개별 시드 예측 레이블도 함께 병합됨
             final_output_df = final_output_df.join(agg_all_indexed, how='left')
 
             FINAL_PARQUET_PATH = output_dir / "stage2_final_predictions_all_data.parquet"
