@@ -1,12 +1,6 @@
-# config.py
-
 """
 Stage 2 (Whale Classification) Global Configuration.
 """
-import torch
-from pathlib import Path
-from typing import List
-
 # =====================================================================================
 # ---- GLOBAL CONFIGURATION (Defaults)
 # =====================================================================================
@@ -55,15 +49,10 @@ WHALE_Q = 1.0 - DEFAULT_WHALE_PCT # Whale Cutoff을 계산하기 위한 Quantile
 WHALE_CUT = 0.0 # Whale cutoff value (실제 LTV 금액, 데이터 로드 후 BASE_SPLIT_SEED 기준으로 계산되어 업데이트됨)
 
 # --- Feature/Model Flags ---
-# 선택지: True, False
 USE_STAGE1_FEATURES = False # Stage 1 예측 확률(STAGE1_PROBA_COL)을 Stage 2 모델의 피처로 포함할지 여부
-# 선택지: True, False
 EXCLUDE_PROBA_FEATURES = True  # 'proba'가 포함된 컬럼 자동 제외 여부
-# 선택지: True, False
 NO_CATBOOST = False # CatBoost 모델 학습을 건너뛸지 여부
-# 선택지: True, False
 NO_LGBM = False # LightGBM 모델 학습을 건너뛸지 여부
-# 선택지: True, False
 NO_TABPFN = False # TabPFN 모델 학습을 건너뛸지 여부
 
 # --- TabPFN Specific ---
@@ -72,7 +61,5 @@ TABPFN_DEVICE = "auto" # TabPFN 모델의 실행 장치
 TABPFN_CONFIGS = 32 # TabPFN 모델의 앙상블 설정(N_ensemble_configurations) 수
 
 # --- Ensemble Configuration (Multi-seed) ---
-# 선택지: "mean", "weighted_by_ap", "hard"
-ENSEMBLE_MODE = "weighted_by_ap" # 여러 시드의 예측 확률을 결합하는 방식 (단순 평균 vs. 검증 AP로 가중 평균)
-# 선택지: True, False
+ENSEMBLE_MODE = "weighted_by_ap" # 여러 시드의 예측 확률을 결합하는 방식
 SKIP_IF_EXISTS = False # per-seed 예측 결과 파일이 이미 존재할 경우, 해당 시드의 훈련/예측을 건너뛸지 여부
