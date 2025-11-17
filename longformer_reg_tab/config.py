@@ -1,6 +1,3 @@
-# config.py
-# 이 파일에 모든 하이퍼파라미터 설정을 담습니다.
-
 HP = dict(
     max_len=128,
     batch_size=64,
@@ -17,7 +14,7 @@ HP = dict(
     num_workers=8,
     base_rate=0.03675,
     
-    transformation_mode='log1p', # 'log1p', 'box_cox', 'yeo_johnson' 중 하나 선택
-    loss_mode='mae',              # 'mae', 'huber' 중 하나 선택
-    huber_delta=1.0               # Huber Loss 사용 시 델타 값
+    transformation_mode='log1p', 
+    loss_mode='mae',      
+    huber_delta=1.0         
 )
