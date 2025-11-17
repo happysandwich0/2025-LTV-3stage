@@ -1,5 +1,3 @@
-# utils.py
-
 """
 Stage 2 Utility Classes and Functions (Timer, Scoring, Cutoff Tuning, CLI Parsing).
 """
@@ -17,10 +15,8 @@ from optuna.trial import TrialState
 import inspect
 import warnings
 
-# Import necessary configuration variables
 from config import F_BETA, DELTA_AROUND, CUT_STEP, MIN_PREC_AT_CUT, DEVICE
 
-# Global TabPFN status (managed in data_preprocessing.py for the class)
 _HAS_TABPFN = False
 
 class SectionTimer:
@@ -78,7 +74,7 @@ def tune_cutoff(y_true, proba, strategy: str, train_pos_prior: float, metric: st
     return _search_cutoff_grid(y_true, proba, center=center, delta=DELTA_AROUND, step=CUT_STEP, metric=metric, beta=beta, min_prec=MIN_PREC_AT_CUT)
 
 def score_stage2_objective(y_true: np.ndarray, proba: np.ndarray) -> float:
-    """Stage 2 튜닝 목적 함수: PR-AUC (Average Precision)를 최대화합니다."""
+    """Stage 2 튜닝 목적 함수: PR-AUC (Average Precision)를 최대화."""
     try:
         return float(average_precision_score(y_true, proba))
     except ValueError:
@@ -94,9 +90,6 @@ def optuna_progress_cb_strict(tag: str):
     return _cb
 
 def construct_tabpfn(cls, device: str, seed: int, n_ens: int):
-    global _HAS_TABPFN
-    if not _HAS_TABPFN: return None 
-    import torch # TabPFNClassifier 인자 구성에 필요
     device_to_use = DEVICE if device == "auto" else device
     try:
         sig = inspect.signature(cls.__init__)
@@ -115,7 +108,6 @@ def make_tabpfn_classifier(device: str, seed: int, n_ens: int):
         from tabpfn import TabPFNClassifier
     except ImportError:
         return None
-        
     return construct_tabpfn(TabPFNClassifier, device=device, seed=seed, n_ens=n_ens)
 
 def parse_seeds(text: str) -> List[int]:
