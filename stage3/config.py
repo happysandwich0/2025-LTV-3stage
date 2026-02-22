@@ -1,54 +1,44 @@
-# --- Data/Column Names ---
-TARGET_COL = "PAY_AMT_SUM" # LTV 예측의 원본 목표 변수 (실제 결제 금액)
-ID_COL = "PLAYERID" # 사용자 ID 컬럼
-PRED_PAYER_COL = "pred_is_payer" # Stage 1 예측 결과 (과금자 여부)
-PRED_WHALE_COL = "pred_is_high_payer" # Stage 2 예측 결과 (Whale 여부)
-STAGE1_PROBA_COL = "stage1_proba" # Stage 1 예측 확률
-STAGE2_PROBA_COL = "stage2_proba" # Stage 2 예측 확률
 
-# --- Hardware/Environment ---
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu" # PyTorch 및 CatBoost의 실행 장치 설정 ("cuda", "cpu")
-CAT_TASK_PARAMS = {"task_type": "GPU"} if DEVICE == "cuda" else {} # CatBoost 학습에 사용되는 추가 파라미터 딕셔너리 (GPU 사용 여부 결정)
+TARGET_COL = "PAY_AMT_SUM"
+ID_COL = "PLAYERID"
+PRED_PAYER_COL = "pred_is_payer" 
+PRED_WHALE_COL = "pred_is_high_payer"
+STAGE1_PROBA_COL = "stage1_proba"
+STAGE2_PROBA_COL = "stage2_proba"
 
-# --- Global Placeholders for the Run ---
-SEED = 2025 # 단일 시드 훈련에 사용되는 기본 난수 시드 (int)
-OPTUNA_SEED = 2025 # Optuna 하이퍼파라미터 튜닝에 사용되는 난수 시드 (int)
-DEFAULT_SEEDS_STR = "2024..2025" # 멀티 시드 훈련에 사용되는 기본 시드 범위 
-N_JOBS = 12 # 병렬 작업자 수 (LightGBM 등에서 n_jobs로 사용됨)
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu" 
+CAT_TASK_PARAMS = {"task_type": "GPU"} if DEVICE == "cuda" else {}
 
-# --- Data/Path Configuration ---
+SEED = 2025 
+OPTUNA_SEED = 2025 
+DEFAULT_SEEDS_STR = "2024..2025"
+N_JOBS = 12 
+
 PROJECT_ROOT = Path(__file__).resolve().parent 
 DATA_DIR = PROJECT_ROOT.parent / "data"
 DEFAULT_INPUT_DATA_PATH = PROJECT_ROOT / "data" / "stage2_data.parquet"
 DEF_OUTPUT_DIR = PROJECT_ROOT / "stage3_results"
 
-# --- Modeling/Metric Constants ---
-DEFAULT_TRIALS = 4 # Optuna 튜닝 시 시도할 횟수 (int)
-DEFAULT_TEST_SIZE = 0.2 # 데이터 분할 시 검증(Validation) 세트의 비율 (float)
-BASE_SPLIT_SEED = 2021 # Imputer 생성 시 사용되는 고정 난수 시드 (int)
+DEFAULT_TRIALS = 4 
+DEFAULT_TEST_SIZE = 0.2 
+BASE_SPLIT_SEED = 2021
 
-# Stage 3 회귀 목표 변수 (로그 변환 사용 여부)
-USE_LOG_TRANSFORM = True # 목표 변수 PAY_AMT_SUM에 로그 변환(np.log1p)을 적용할지 여부 (bool)
-LOG_EPSILON = 1e-6 # 예측값 역변환 시 np.expm1(p) + log_epsilon
-SMAPE_EPSILON = 0.1 # sMAPE 계산 시 분모의 안정화를 위한 엡실론 값 추가
+USE_LOG_TRANSFORM = True
+LOG_EPSILON = 1e-6
+SMAPE_EPSILON = 0.1
 
-# --- Model Specific Flags ---
-USE_STAGE1_FEATURES = False # Stage 1 예측 확률을 피처로 사용할지
-USE_STAGE2_FEATURES = False # Stage 2 예측 확률을 피처로 사용할지
-NO_CATBOOST = False # CatBoost 모델 학습을 건너뛸지 여부 (bool)
-NO_LGBM = False # LightGBM 모델 학습을 건너뛸지 여부 (bool)
-NO_TABPFN = False # TabPFN 모델 학습을 건너뛸지 여부 (bool)
+USE_STAGE1_FEATURES = False
+USE_STAGE2_FEATURES = False
+NO_CATBOOST = False 
+NO_LGBM = False
+NO_TABPFN = False 
 
-# --- TabPFN Specific ---
-TABPFN_DEVICE = "auto" # TabPFN 모델의 실행 장치 ("auto", "cpu", "cuda")
-TABPFN_CONFIGS = 32 # TabPFN 모델의 앙상블 설정(N_ensemble_configurations) 수
+TABPFN_DEVICE = "auto" 
+TABPFN_CONFIGS = 32 
 
-# --- Regression Loss (회귀 손실 함수) ---
-LGBM_LOSS = "rmse" # LightGBM에서 사용할 손실 함수 ("rmse", "mae", "huber" 등)
-CAT_LOSS = "RMSE" # CatBoost에서 사용할 손실 함수 ("RMSE", "MAE", "Huber" 등)
+LGBM_LOSS = "rmse"
+CAT_LOSS = "RMSE" 
 
-
-# --- 튜닝 범위: Non-Whale Payer ---
 TUNE_NON_WHALE = {
     "lgbm": {
         "n_estimators": (400, 700), "learning_rate": (0.01, 0.1), "num_leaves": (20, 60), 
@@ -61,7 +51,6 @@ TUNE_NON_WHALE = {
     }
 }
 
-# --- 튜닝 범위: Whale Payer ---
 TUNE_WHALE = {
     "lgbm": {
         "n_estimators": (600, 1000), "learning_rate": (0.01, 0.15), "num_leaves": (50, 127), 
@@ -74,7 +63,5 @@ TUNE_WHALE = {
     }
 }
 
-
-# --- Ensemble Configuration (Multi-seed) ---
-ENSEMBLE_MODE = "mean" # 여러 시드의 예측 확률을 결합하는 방식 ("mean", "weighted_by_mae" 등)
-SKIP_IF_EXISTS = False # per-seed 예측 결과 파일이 이미 존재할 경우, 해당 시드의 훈련/예측을 건너뛸지 여부 (bool)
+ENSEMBLE_MODE = "mean"
+SKIP_IF_EXISTS = False
