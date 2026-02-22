@@ -1,6 +1,4 @@
-"""
-Stage 2/3 Utility Classes and Functions
-"""
+
 import logging
 from time import perf_counter
 import math
