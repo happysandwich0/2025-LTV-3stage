@@ -10,7 +10,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use("Agg")  # Use Agg backend for non-interactive plotting
+matplotlib.use("Agg") 
 
 from catboost import CatBoostClassifier, Pool
 import lightgbm as lgb
@@ -85,7 +85,6 @@ def tune_lgbm_cls(
             force_row_wise=True,
         )
 
-        # 클래스 불균형 대응 (reweight 전략)
         if strategy == "reweight":
             w_neg = (len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1)
             if REWEIGHT_BY_FBETA:
@@ -122,14 +121,13 @@ def tune_lgbm_cls(
     best.update(
         dict(
             objective="binary",
-            random_state=current_seed, # 💡 전달받은 seed 사용
+            random_state=current_seed,
             n_jobs=max(1, (os.cpu_count() or 8) // 4),
             verbosity=-1,
             force_row_wise=True,
         )
     )
     if strategy == "reweight":
-        # 양성(whale) 희소성에 맞춘 class_weight
         w_pos = (len(y_tr) - y_tr.sum()) / max(y_tr.sum(), 1)
         if REWEIGHT_BY_FBETA:
             w_pos *= (F_BETA ** 2)
@@ -139,10 +137,6 @@ def tune_lgbm_cls(
     logging.info(f"[LGBM][{strategy}] Best params: {best}")
     return best
 
-
-# =============================================================================
-# CatBoost Tuning
-# =============================================================================
 def tune_cat_cls(
     X_tr,
     y_tr,
@@ -239,9 +233,6 @@ def tune_cat_cls(
     return best
 
 
-# =============================================================================
-# Plotting Functions (Diagnostics)
-# =============================================================================
 def plot_lgbm_error_trajectory(
     Xtr,
     y_tr,
@@ -251,7 +242,6 @@ def plot_lgbm_error_trajectory(
     output_dir,
     current_seed,
 ):
-    """LGBM의 VAL PR-AUC Error 궤적 플롯."""
     if Xva.shape[1] == 0:
         logging.warning("[PLOT] Xva is empty, skipping LGBM plot.")
         return
@@ -314,7 +304,7 @@ def plot_lgbm_error_trajectory(
         label=f"Min Error ({best_idx + 1})",
     )
     logging.info(
-        f"🔎 [LGBM Plot] Min Error: iter={best_idx + 1:,} | "
+        f" [LGBM Plot] Min Error: iter={best_idx + 1:,} | "
         f"AP={ap_arr[best_idx]:.6f}"
     )
 
@@ -346,7 +336,6 @@ def plot_cat_error_trajectory(
     output_dir: Path,
     current_seed: int,
 ):
-    """CatBoost의 VAL PR-AUC Error 궤적 플롯."""
     if Xva.shape[1] == 0:
         logging.warning("[PLOT] Xva is empty, skipping CatBoost plot.")
         return
@@ -422,7 +411,7 @@ def plot_cat_error_trajectory(
         label=f"Min Error ({best_idx + 1})",
     )
     logging.info(
-        f"🔎 [CAT Plot] Min Error: iter={best_idx + 1:,} | "
+        f" [CAT Plot] Min Error: iter={best_idx + 1:,} | "
         f"AP={ap_arr[best_idx]:.6f}"
     )
 
