@@ -1,8 +1,3 @@
-"""
-Stage 3 Hybrid Pipeline Core Logic: Final LTV Regression.
-- Uses Stage 1 (Payer/Non-Payer) and Stage 2 (Whale/Non-Whale) predictions to segment the data.
-- Trains separate Regressors for Non-Whale Payers and Whale Payers.
-"""
 import json
 import sys
 import os
@@ -25,7 +20,7 @@ from config import (
     NO_CATBOOST, NO_LGBM, NO_TABPFN,
     ENSEMBLE_MODE, SKIP_IF_EXISTS, DEFAULT_SEEDS_STR, DEFAULT_INPUT_DATA_PATH
 )
-from config import SEED, OPTUNA_SEED # 기본값 로드를 위해 유지
+from config import SEED, OPTUNA_SEED 
 
 from utils import SectionTimer, _sanitize_cols, parse_seeds 
 from data_preprocessing import (
@@ -37,15 +32,11 @@ from models import (
 
 OUTPUT_DIR = Path(DEF_OUTPUT_DIR)
 ARTIFACTS_PATH = OUTPUT_DIR / "global_artifacts"
-ENCODER_PATH = ARTIFACTS_PATH / "stage3_encoder.joblib" # Stage 3 전용 인코더 경로
-IMPUTER_PATH = ARTIFACTS_PATH / "stage3_imputer.joblib" # Stage 3 전용 Imputer 경로
-FEAT_COLS_PATH = ARTIFACTS_PATH / "stage3_feat_cols.joblib" # 피처 목록 저장 경로
+ENCODER_PATH = ARTIFACTS_PATH / "stage3_encoder.joblib" 
+IMPUTER_PATH = ARTIFACTS_PATH / "stage3_imputer.joblib"
+FEAT_COLS_PATH = ARTIFACTS_PATH / "stage3_feat_cols.joblib" 
 MODELS_PATH = OUTPUT_DIR / "models"
 LOGS_PATH = OUTPUT_DIR / "logs"
-
-# =====================================================================================
-# ---- DATA LOADING CORE
-# =====================================================================================
 
 def create_stage2_data_parquet():
     data_dir = DEFAULT_INPUT_DATA_PATH.parent 
@@ -149,12 +140,8 @@ def load_data_and_prepare_for_regression():
     return {
         "non_whale": {"tr": tr_nw_full, "va": va_nw_full, "test": test_nw},
         "whale": {"tr": tr_whale_full, "va": va_whale_full, "test": test_whale},
-        "all": df_full # 최종 평가를 위한 전체 데이터셋
+        "all": df_full
     }
-
-# =====================================================================================
-# ---- CORE LOGIC: STAGE 3 TRAIN (Single Seed)
-# =====================================================================================
 
 def _prepare_features_and_artifacts(data_sets, group_key, train_seed):
     artifacts_path = ARTIFACTS_PATH
@@ -183,7 +170,6 @@ def _prepare_features_and_artifacts(data_sets, group_key, train_seed):
         logging.info(f"✅ Loaded global encoder from {ENCODER_PATH}")
 
     if not IMPUTER_PATH.exists(): 
-        # df_tr_all을 사용하여 Imputer 학습
         Xtr_base_raw, _, _ = build_features(df_tr_all, TARGET_COL, drop_cols_for_feature)
         Xtr_base_encoded = enc.transform(Xtr_base_raw)
         num_cols, med = fit_imputer(Xtr_base_encoded)
@@ -220,7 +206,6 @@ def _prepare_features_and_artifacts(data_sets, group_key, train_seed):
         y_tr_log = y_tr_raw
         y_va_log = y_va_raw
 
-    # feat_cols_global를 반환 목록에 추가합니다.
     return Xtr, y_tr_log, y_tr_raw, Xva, y_va_log, y_va_raw, cat_cols_idx, num_cols, med, enc, feat_cols_global
 
 
@@ -239,7 +224,6 @@ def run_stage3_train_core(train_seed, data_sets):
     
     try:
         with SectionTimer("Non-Whale Payer Regression Training"):
-            # feat_cols_global을 받아옵니다.
             Xtr_nw, ytr_log_nw, ytr_raw_nw, Xva_nw, yva_log_nw, yva_raw_nw, cat_cols_idx, _, _, _, feat_cols_global = _prepare_features_and_artifacts(
                 data_sets, "non_whale", train_seed
             )
@@ -253,7 +237,6 @@ def run_stage3_train_core(train_seed, data_sets):
             all_models.update({f"nw_{k}": v for k, v in models_nw.items()})
 
         with SectionTimer("Whale Payer Regression Training"):
-            # Whale 그룹은 feat_cols_global을 반환하지 않으므로 무시
             Xtr_w, ytr_log_w, ytr_raw_w, Xva_w, yva_log_w, yva_raw_w, cat_cols_idx, _, _, _, _ = _prepare_features_and_artifacts(
                 data_sets, "whale", train_seed
             )
@@ -276,10 +259,6 @@ def run_stage3_train_core(train_seed, data_sets):
         logging.error(f"☠️ Pipeline terminated due to critical error: {critical_error}")
         raise critical_error
 
-
-# =====================================================================================
-# ---- CORE LOGIC: STAGE 3 PREDICT ALL (Train+Val+Test)
-# =====================================================================================
 
 def run_stage3_predict_all_core(seed, data_sets):
     logging.info(f"--- Starting Stage 3 Prediction for ALL Data (Seed: {seed}) ---")
@@ -334,7 +313,7 @@ def run_stage3_predict_all_core(seed, data_sets):
             
             final_pred_map = pd.Series(np.zeros(len(df_all)), index=df_all.index)
         
-            if len(idx_nw) > 0 and models.get("nw_lgbm"): # 최소 하나의 모델 존재 확인
+            if len(idx_nw) > 0 and models.get("nw_lgbm"):
                 X_nw = X_all.loc[idx_nw]
                 preds_log = []
                 for k in ["lgbm", "cat", "tab"]:
@@ -379,9 +358,6 @@ def run_stage3_predict_all_core(seed, data_sets):
         logging.error(f"❌ Critical error in predict_all for seed {seed}: {e}", exc_info=True)
 
 
-# =====================================================================================
-# ---- CORE LOGIC: STAGE 3 MULTI (Multi Seed Ensemble)
-# =====================================================================================
 
 def load_seed_preds(output_dir, seed, scope="all"):
     p = output_dir / f"stage3_predictions_{scope}_{seed}.csv"
@@ -394,7 +370,6 @@ def load_seed_preds(output_dir, seed, scope="all"):
 def calculate_detailed_metrics(df_agg, group_name):
     y_true = df_agg[TARGET_COL].values
     
-    # 'ZERO_PREDICTION' 그룹에 대한 특별 처리: 예측값을 0으로 설정
     if "ZERO_PREDICTION" in group_name:
         y_pred = np.zeros_like(y_true, dtype=float)
         # Avg.Pred는 0
@@ -509,35 +484,28 @@ def run_stage3_multi_core():
         
         all_metrics["zero_prediction_all"] = calculate_detailed_metrics(df_test_zero, "ZERO_PREDICTION_ALL_TEST")
 
-
-        # 1. Real Whale
         all_metrics["real_whale"] = calculate_detailed_metrics(df_real_whale, "REAL_WHALE_TEST")
-        # 2. Real Non-Whale Payer
+        
         all_metrics["real_non_whale_payer"] = calculate_detailed_metrics(df_real_non_whale_payer, "REAL_NON_WHALE_PAYER_TEST")
-        # 3. Real Non-Payer
+
         all_metrics["real_non_payer"] = calculate_detailed_metrics(df_real_non_payer, "REAL_NON_PAYER_TEST")
         
-        # 4. Real Payer: 전체
         all_metrics["real_payer_overall"] = calculate_detailed_metrics(df_real_payer, "REAL_PAYER_OVERALL_TEST")
         
-        # 4. Real Payer: 20%
         if len(df_real_payer) > 0:
             df_real_payer['quantile_group'] = pd.qcut(df_real_payer[TARGET_COL], q=[0, 0.2, 0.4, 0.6, 0.8, 1.0], labels=False, duplicates='drop')
             for i in sorted(df_real_payer['quantile_group'].unique()):
                 group_name = f"REAL_PAYER_Q{i*20+1}-{(i+1)*20}_TEST"
                 all_metrics[f"real_payer_q{i}"] = calculate_detailed_metrics(df_real_payer[df_real_payer['quantile_group'] == i], group_name)
         
-        # 4. Real Payer: Top 1, 3, 5, 10% (Percentile)
         for pct in [1, 3, 5, 10]:
             if len(df_real_payer) > 0:
-                # 1 - (pct / 100)로 상위 %의 임계값을 구함 (예: Top 5% -> 0.95 quantile)
                 top_threshold = df_real_payer[TARGET_COL].quantile(1 - (pct / 100))
                 df_top_pct = df_real_payer[df_real_payer[TARGET_COL] >= top_threshold].copy()
                 if not df_top_pct.empty:
                     group_name = f"REAL_PAYER_TOP_{pct}PCT_TEST"
                     all_metrics[f"real_payer_top_{pct}pct"] = calculate_detailed_metrics(df_top_pct, group_name)
                     
-        # 5. All
         all_metrics["all"] = calculate_detailed_metrics(df_test, "ALL_TEST")
 
         df_metrics = pd.DataFrame.from_dict(all_metrics, orient='index')
@@ -583,10 +551,6 @@ def run_stage3_multi_core():
            
     logging.info("✅ Multi-Seed Ensemble Regression Pipeline Complete.")
     sys.exit(0) 
-
-# =====================================================================================
-# ---- MAIN EXECUTION ENTRY POINT
-# =====================================================================================
 
 def main_cli_entry():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
