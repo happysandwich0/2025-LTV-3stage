@@ -1,7 +1,7 @@
-# Kakao Games LTV Prediction Pipeline
+# LTV Prediction Pipeline
 
 
-This project implements a **three-stage machine learning pipeline** designed to predict **Lifetime Value (LTV)** of Kakao Games users. The pipeline is optimized for highly imbalanced spending distributions and leverages both classification and regression models in a hierarchical structure.
+This project implements a **three-stage machine learning pipeline** designed to predict **Lifetime Value (LTV)** of users. The pipeline is optimized for highly imbalanced spending distributions and leverages both classification and regression models in a hierarchical structure.
 
 Our work targets two core challenges in game monetization modeling:
 
