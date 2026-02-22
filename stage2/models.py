@@ -1,6 +1,3 @@
-"""
-Stage 2 Model Tuning, Training, and Diagnostic Plotting.
-"""
 import logging
 import os
 from typing import List, Dict, Any
@@ -24,10 +21,6 @@ from sklearn.metrics import average_precision_score, precision_recall_curve
 from config import SEED, OPTUNA_SEED, CAT_TASK_PARAMS, F_BETA, REWEIGHT_BY_FBETA
 from utils import score_stage2_objective, optuna_progress_cb_strict
 
-
-# =============================================================================
-# LightGBM Tuning
-# =============================================================================
 def tune_lgbm_cls(
     X_tr,
     y_tr,
