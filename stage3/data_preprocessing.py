@@ -1,7 +1,3 @@
-"""
-Data Preparation: Feature Engineering, Encoding, Imputation.
-Also handles global TabPFN import check.
-"""
 
 import logging
 import numpy as np
@@ -13,7 +9,6 @@ from config import (
     DEVICE, USE_STAGE1_FEATURES, USE_STAGE2_FEATURES
 )
 
-# Global flag for TabPFN status
 _HAS_TABPFN = False
 try:
     from tabpfn import TabPFNRegressor
@@ -42,7 +37,6 @@ class OrdinalCategoryEncoder:
         for c in self.cols:
             if c in out.columns:
                 s = out[c].astype(object)
-                # 맵에 없는 값은 -1로 인코딩
                 out[c] = s.apply(lambda v: self.maps[c].get(v, -1)).astype(np.int32) 
         return out
 
@@ -57,12 +51,10 @@ def build_features(df, target_col, drop_cols):
     
     X = df[cols].copy()
     
-    # config.USE_STAGE1_FEATURES 직접 사용
     if USE_STAGE1_FEATURES and STAGE1_PROBA_COL in df.columns:
         logging.info(f"Adding Stage 1 proba feature: {STAGE1_PROBA_COL}")
         X[STAGE1_PROBA_COL] = df[STAGE1_PROBA_COL]
 
-    # config.USE_STAGE2_FEATURES 직접 사용
     if USE_STAGE2_FEATURES and STAGE2_PROBA_COL in df.columns:
         logging.info(f"Adding Stage 2 proba feature: {STAGE2_PROBA_COL}")
         X[STAGE2_PROBA_COL] = df[STAGE2_PROBA_COL]
