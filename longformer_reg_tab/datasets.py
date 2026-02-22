@@ -17,7 +17,6 @@ def collate_batch(batch, max_len=None):
         current_global_mask = b["global_attention_mask"]
         
         if max_len is not None and len(current_input_ids) > max_len:
-            # max_len을 초과하는 시퀀스는 뒤에서부터 자름
             trimmed_input_ids.append(current_input_ids[-max_len:])
             trimmed_global_masks.append(current_global_mask[-max_len:])
         else:
