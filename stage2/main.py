@@ -1,11 +1,3 @@
-"""
-Stage 2 Unified Pipeline Core Logic (with single ensemble() utility).
-- Config-driven (no CLI parsing).
-- One `ensemble()` function handles both soft/hard voting for:
-  * per-seed (model ensemble)
-  * multi-seed (seed ensemble) 
-"""
-
 import json
 import sys
 import os
@@ -57,9 +49,6 @@ from models import (
     tune_lgbm_cls, tune_cat_cls, plot_lgbm_error_trajectory, plot_cat_error_trajectory
 )
 
-# -----------------------------
-# Single ensemble utility
-# -----------------------------
 def ensemble(
     scores,             
     mode: str = "soft",        
@@ -121,9 +110,6 @@ def ensemble(
 
     raise ValueError("mode must be 'soft' or 'hard'")
 
-# -----------------------------
-# Global artifact paths
-# -----------------------------
 OUTPUT_DIR = Path(DEF_OUTPUT_DIR)
 ARTIFACTS_PATH = OUTPUT_DIR / "global_artifacts"
 ENCODER_PATH = ARTIFACTS_PATH / "stage2_encoder.joblib"
@@ -132,22 +118,14 @@ WHALE_CUT_PATH = ARTIFACTS_PATH / "stage2_whale_cut.json"
 MODELS_PATH = OUTPUT_DIR / "models"
 LOGS_PATH = OUTPUT_DIR / "logs"
 
-# === Stage2 splitting policy ===
 USE_STAGE2_STRATIFIED_SPLIT = True
 STAGE2_SPLIT_RATIOS = (0.60, 0.20, 0.20)
 
 BASE_DROP_COLS = [ID_COL, TARGET_COL, PRED_PAYER_COL, "stage1_tvt", "stage2_tvt"]
 
-# -----------------------------
-# Initial data prep
-# -----------------------------
 def create_stage1_data_parquet():
     data_dir = DEFAULT_INPUT_DATA_PATH.parent
     final_output_path = DEFAULT_INPUT_DATA_PATH
-
-    if final_output_path.exists():
-        logging.info(f"✅ Initial Data Prep: {final_output_path.name} already exists. Skipping data creation.")
-        return
 
     logging.info("▶ START: Creating initial stage1_data.parquet")
     try:
@@ -167,44 +145,33 @@ def create_stage1_data_parquet():
                 df_tvt = pd.read_parquet(file_path, columns=[ID_COL])
                 df_tvt["stage1_tvt"] = tvt_label
                 tvt_maps.append(df_tvt[[ID_COL, "stage1_tvt"]])
-            else:
-                logging.warning(f"⚠️ TVT file missing: {file_path}. Skipping {tvt_label} mapping.")
         if not tvt_maps:
             raise ValueError("No TVT map files were found. Cannot create stage1_tvt column.")
 
         df_tvt_map = pd.concat(tvt_maps, ignore_index=True)
         if df_tvt_map[ID_COL].duplicated().any():
-            logging.warning("⚠️ Duplicate PLAYERID found in TVT map files. Using first occurrence.")
+            logging.warning(" Duplicate PLAYERID found in TVT map files. Using first occurrence.")
             df_tvt_map = df_tvt_map.drop_duplicates(subset=[ID_COL], keep='first')
 
         df_final = pd.merge(df_base, df_tvt_map, on=ID_COL, how="left")
         df_final['stage1_tvt'] = df_final['stage1_tvt'].fillna('unknown')
 
         df_final.to_parquet(final_output_path, index=False)
-        logging.info(f"✅ Initial Data Prep: Successfully created {final_output_path.name} ({df_final.shape}).")
+        logging.info(f" Initial Data Prep: Successfully created {final_output_path.name} ({df_final.shape}).")
 
     except Exception as e:
-        logging.error(f"❌ Initial Data Prep failed: {e}", exc_info=True)
+        logging.error(f" Initial Data Prep failed: {e}", exc_info=True)
         raise RuntimeError(f"Data preparation failed: {e}")
 
-# -----------------------------
-# Data loading / splitting
-# -----------------------------
 def load_and_split_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df_full = pd.read_parquet(DEFAULT_INPUT_DATA_PATH)
     if ID_COL in df_full.columns:
         df_full = df_full.set_index(ID_COL, drop=False)
     
-    # Stage 1 예측 과금자만 사용
     df_filtered = df_full[df_full[PRED_PAYER_COL] == 1].copy()
-    if len(df_filtered) == 0:
-        raise ValueError("❌ No predicted payers in the dataset (df_filtered).")
-    logging.info(f"✅ Filtered Data (Total): {df_filtered.shape}")
 
     if USE_STAGE2_STRATIFIED_SPLIT:
         payers = df_filtered[df_filtered[TARGET_COL] > 0][TARGET_COL]
-        if len(payers) == 0:
-            raise ValueError("❌ No true payers in filtered data; cannot compute provisional whale cut.")
         whale_cut_prov = float(np.quantile(payers, WHALE_Q))
         y_whale_all = (df_filtered[TARGET_COL] >= whale_cut_prov).astype(int)
 
@@ -235,28 +202,20 @@ def load_and_split_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         df_test = df_te.copy()
         df_all = pd.concat([df_tr, df_va, df_te], axis=0)
 
-        logging.info(f"✅ Stage2 stratified split | "
+        logging.info(f" Stage2 stratified split | "
                      f"train={df_tr.shape} val={df_va.shape} test={df_te.shape} "
                      f"(BASE_SPLIT_SEED={BASE_SPLIT_SEED})")
 
     else:
         if "stage1_tvt" not in df_filtered.columns:
-            raise KeyError("❌ 'stage1_tvt' column not found. Run initial data prep or enable Stage2 split.")
+            raise KeyError(" 'stage1_tvt' column not found. Run initial data prep or enable Stage2 split.")
         df_train_val = df_filtered[df_filtered["stage1_tvt"].isin(["train", "val"])].copy()
         df_test = df_filtered[df_filtered["stage1_tvt"] == "test"].copy()
         df_all = df_filtered.copy()
-        logging.info(f"✅ Stage1 TVT split | train+val={df_train_val.shape} test={df_test.shape}")
-
-    if len(df_train_val) == 0:
-        raise ValueError("❌ Stage 2 Training/Validation set is empty.")
-    if len(df_test) == 0:
-        logging.warning("⚠️ Stage 2 Test set is empty. Final test metrics will be skipped.")
-
+        logging.info(f" Stage1 TVT split | train+val={df_train_val.shape} test={df_test.shape}")
+     
     return df_train_val, df_test, df_all
 
-# -----------------------------
-# Single-seed train
-# -----------------------------
 def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
     np.random.seed(train_seed)
     random.seed(train_seed)
@@ -290,46 +249,45 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
             if not ENCODER_PATH.exists():
                 enc = OrdinalCategoryEncoder().fit(df_train_val, cat_cols_global)
                 joblib.dump(enc, ENCODER_PATH)
-                logging.info(f"✅ Created and saved global encoder at {ENCODER_PATH}")
+                logging.info(f" Created and saved global encoder at {ENCODER_PATH}")
             else:
                 enc = joblib.load(ENCODER_PATH)
-                logging.info(f"✅ Loaded global encoder from {ENCODER_PATH}")
+                logging.info(f" Loaded global encoder from {ENCODER_PATH}")
 
             if not IMPUTER_PATH.exists() or not WHALE_CUT_PATH.exists() or config.WHALE_CUT == 0.0:
                 df_non_test = df_train_val.copy()
                 df_payers_non_test = df_non_test[df_non_test[TARGET_COL] > 0]
                 if len(df_payers_non_test) == 0:
-                    raise ValueError("❌ No true payers in non-test pool for whale_cut.")
+                    raise ValueError(" No true payers in non-test pool for whale_cut.")
                 whale_cut = float(np.quantile(df_payers_non_test[TARGET_COL], WHALE_Q))
                 json.dump({"whale_cut": whale_cut}, open(WHALE_CUT_PATH, "w"))
                 config.WHALE_CUT = whale_cut
-                logging.info(f"✅ Global whale_cut(non-test payers, q={WHALE_Q:.2f}): {whale_cut:.2f}")
+                logging.info(f" Global whale_cut(non-test payers, q={WHALE_Q:.2f}): {whale_cut:.2f}")
 
                 df_non_test.drop(columns=["stage2_tvt", "stage1_tvt"], errors="ignore", inplace=True)
                 X_non_test_raw, _, _ = build_features(df_non_test, TARGET_COL, feature_drop_cols())
                 X_non_test_enc = enc.transform(X_non_test_raw)
                 num_cols, med = fit_imputer(X_non_test_enc)
                 joblib.dump((num_cols, med), IMPUTER_PATH)
-                logging.info(f"✅ Global imputer(median) saved: {IMPUTER_PATH}")
+                logging.info(f" Global imputer(median) saved: {IMPUTER_PATH}")
             else:
                 num_cols, med = joblib.load(IMPUTER_PATH)
                 whale_cut = json.load(open(WHALE_CUT_PATH))["whale_cut"]
                 config.WHALE_CUT = whale_cut
-                logging.info(f"✅ Loaded global artifacts: whale_cut={whale_cut:.2f}")
+                logging.info(f" Loaded global artifacts: whale_cut={whale_cut:.2f}")
 
             tvt_col = "stage2_tvt" if "stage2_tvt" in df_train_val.columns else "stage1_tvt"
             if tvt_col not in df_train_val.columns:
-                raise KeyError("❌ Neither 'stage2_tvt' nor 'stage1_tvt' found in df_train_val.")
+                raise KeyError(" Neither 'stage2_tvt' nor 'stage1_tvt' found in df_train_val.")
 
             df_tr = df_train_val[df_train_val[tvt_col] == "train"].copy()
             df_va = df_train_val[df_train_val[tvt_col] == "val"].copy()
             if len(df_tr) == 0 or len(df_va) == 0:
-                raise ValueError("❌ Invalid Stage2 split: empty train/val.")
+                raise ValueError(" Invalid Stage2 split: empty train/val.")
 
             y_tr = (df_tr[TARGET_COL] >= config.WHALE_CUT).astype(int)
             y_va = (df_va[TARGET_COL] >= config.WHALE_CUT).astype(int)
 
-            # TVT 컬럼은 build_features 전에 안전 제거(중복 드롭로 인한 KeyError 방지)
             df_tr.drop(columns=["stage2_tvt", "stage1_tvt"], errors="ignore", inplace=True)
             df_va.drop(columns=["stage2_tvt", "stage1_tvt"], errors="ignore", inplace=True)
 
@@ -357,7 +315,7 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
             logging.info(f"    - Train Pos Prior (Whale ratio): {pos_prior:.4f}")
 
         except Exception as e:
-            logging.error(f"❌ Data Preparation failed: {e}")
+            logging.error(f" Data Preparation failed: {e}")
             critical_error = e
 
     if not critical_error:
@@ -398,7 +356,7 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
                             models["tab"], preds["tab"], cutoffs["tab"] = tab2, p_tab, t_tab
 
                     if not preds:
-                        raise ValueError("❌ No models were trained.")
+                        raise ValueError(" No models were trained.")
 
                     # unified ensemble (hard-by-model) on VAL
                     proba_ref, yhat_final = ensemble(preds, mode="hard", cutoffs=cutoffs, weights=None)
@@ -441,10 +399,10 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
                 }
                 with open(CUTOFFS_FILE, "w") as f:
                     json.dump(save_payload, f)
-                logging.info(f"✅ Saved VAL thresholds to {CUTOFFS_FILE}")
+                logging.info(f"Saved VAL thresholds to {CUTOFFS_FILE}")
 
         except Exception as e:
-            logging.error(f"❌ Model Training or Ensemble failed: {e}")
+            logging.error(f" Model Training or Ensemble failed: {e}")
             critical_error = e
 
         try:
@@ -453,7 +411,7 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
             if not NO_CATBOOST and best_cat_params and best["models"].get("cat"):
                 plot_cat_error_trajectory(Xtr, y_tr, Xva, y_va, cat_cols_idx, best_cat_params, output_dir, train_seed)
         except Exception as e:
-            logging.error(f"⚠️ Plot generation failed (non-critical): {e}", exc_info=True)
+            logging.error(f" Plot generation failed (non-critical): {e}", exc_info=True)
 
     if best["models"]:
         MODELS_PATH.mkdir(exist_ok=True)
@@ -461,7 +419,7 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
         try:
             joblib.dump(best["models"], model_file)
         except Exception as e:
-            logging.error(f"❌ Failed to save Stage 2 models to joblib: {e}")
+            logging.error(f" Failed to save Stage 2 models to joblib: {e}")
 
     if Xva is not None and y_va is not None and best["score"] != -1.0:
         pred_file = output_dir / f"stage2_predictions_val_{train_seed}.csv"
@@ -477,15 +435,8 @@ def run_stage2_train_core(train_seed: int, df_train_val: pd.DataFrame):
             pred_df.to_csv(pred_file, index=False)
             metrics_df.to_csv(metrics_file, index=False)
         except Exception as e:
-            logging.error(f"❌ Failed to save CSV files: {e}", exc_info=True)
+            logging.error(f" Failed to save CSV files: {e}", exc_info=True)
 
-    if critical_error:
-        logging.error(f"☠️ Pipeline terminated due to critical error: {critical_error}")
-        raise critical_error
-
-# -----------------------------
-# Predict ALL
-# -----------------------------
 def _predict_with_model(model_key: str, model: Any, X: pd.DataFrame, cat_cols_idx: list) -> np.ndarray:
     if model_key == "cat":
         pool = Pool(X, cat_features=cat_cols_idx or None)
@@ -504,10 +455,10 @@ def run_stage2_predict_all_core(seed: int, df_all: pd.DataFrame):
     predict_output_path = output_dir / f"stage2_predictions_all_{seed}.csv"
 
     if not model_file.exists():
-        logging.error(f"❌ Model file not found for seed {seed}: {model_file}. Skipping prediction.")
+        logging.error(f" Model file not found for seed {seed}: {model_file}. Skipping prediction.")
         return
     if predict_output_path.exists() and SKIP_IF_EXISTS:
-        logging.info(f"✅ Prediction file for seed {seed} already exists. Skipping prediction.")
+        logging.info(f" Prediction file for seed {seed} already exists. Skipping prediction.")
         return
 
     try:
@@ -551,10 +502,9 @@ def run_stage2_predict_all_core(seed: int, df_all: pd.DataFrame):
                     all_preds[model_key] = p
                     pred_data[f"p_{model_key}"] = p
                 except Exception as e:
-                    logging.warning(f"⚠️ Prediction failed for model {model_key}: {e}")
-
+                    logging.warning(f" Prediction failed for model {model_key}: {e}")
             if not all_preds:
-                raise RuntimeError("❌ No models successfully generated predictions.")
+                raise RuntimeError(" No models successfully generated predictions.")
 
             cut_file = ARTIFACTS_PATH / f"stage2_cutoffs_{seed}.json"
             per_model_cuts = {}
@@ -569,14 +519,11 @@ def run_stage2_predict_all_core(seed: int, df_all: pd.DataFrame):
 
             pred_df = pd.DataFrame({k: v for k, v in pred_data.items() if v is not None and v is not False})
             pred_df.to_csv(predict_output_path, index=False)
-            logging.info(f"✅ Saved all data predictions for seed {seed} at {predict_output_path}")
+            logging.info(f" Saved all data predictions for seed {seed} at {predict_output_path}")
 
     except Exception as e:
-        logging.error(f"❌ Critical error in predict_all for seed {seed}: {e}", exc_info=True)
+        logging.error(f" Critical error in predict_all for seed {seed}: {e}", exc_info=True)
 
-# -----------------------------
-# Predict TEST
-# -----------------------------
 def run_stage2_predict_test_core(seed: int, df_test: pd.DataFrame):
     logging.info(f"--- Starting Stage 2 Prediction for TEST Data (Seed: {seed}) ---")
 
@@ -585,16 +532,6 @@ def run_stage2_predict_test_core(seed: int, df_test: pd.DataFrame):
     model_file = MODELS_PATH / f"stage2_models_{seed}.joblib"
     metrics_test_file = output_dir / f"stage2_metrics_test_{seed}.csv"
     all_preds_file = output_dir / f"stage2_predictions_all_{seed}.csv"
-
-    if len(df_test) == 0:
-        logging.warning("⚠️ Skipping TEST prediction as the test set is empty.")
-        return
-    if not model_file.exists():
-        logging.error(f"❌ Model file not found for seed {seed}: {model_file}. Skipping TEST prediction.")
-        return
-    if predict_output_path_test.exists() and SKIP_IF_EXISTS:
-        logging.info(f"✅ TEST Prediction file for seed {seed} already exists. Skipping prediction.")
-        return
 
     try:
         with SectionTimer("Loading Artifacts for Test Prediction"):
@@ -634,10 +571,10 @@ def run_stage2_predict_test_core(seed: int, df_test: pd.DataFrame):
                     all_preds[model_key] = p
                     pred_data[f"p_{model_key}"] = p
                 except Exception as e:
-                    logging.warning(f"⚠️ TEST Prediction failed for model {model_key}: {e}")
+                    logging.warning(f" TEST Prediction failed for model {model_key}: {e}")
 
             if not all_preds:
-                raise RuntimeError("❌ No models successfully generated TEST predictions.")
+                raise RuntimeError(" No models successfully generated TEST predictions.")
 
             cut_file = ARTIFACTS_PATH / f"stage2_cutoffs_{seed}.json"
             per_model_cuts = {}
@@ -669,20 +606,16 @@ def run_stage2_predict_test_core(seed: int, df_test: pd.DataFrame):
 
             pred_df = pd.DataFrame({k: v for k, v in pred_data.items() if v is not None and v is not False})
             pred_df.to_csv(predict_output_path_test, index=False)
-            logging.info(f"✅ Saved TEST data predictions for seed {seed} at {predict_output_path_test}")
-            logging.info(f"✅ Saved TEST metrics for seed {seed} at {metrics_test_file}")
+            logging.info(f" Saved TEST data predictions for seed {seed} at {predict_output_path_test}")
+            logging.info(f" Saved TEST metrics for seed {seed} at {metrics_test_file}")
 
     except Exception as e:
-        logging.error(f"❌ Critical error in predict_test for seed {seed}: {e}", exc_info=True)
+        logging.error(f" Critical error in predict_test for seed {seed}: {e}", exc_info=True)
 
-# -----------------------------
-# Multi-seed ensemble
-# -----------------------------
 def load_seed_preds(output_dir, seed, scope="all"):
     p = output_dir / f"stage2_predictions_{scope}_{seed}.csv"
     if not p.exists():
         raise FileNotFoundError(f"Missing predictions for seed={seed}, scope={scope}: {p}")
-    # yhat_stage2 컬럼을 추가로 로드
     df = pd.read_csv(p)
     df["seed"] = seed
     return df
@@ -747,7 +680,7 @@ def run_stage2_multi_core():
     try:
         df_train_val, df_test, df_all = load_and_split_data()
     except Exception as e:
-        logging.error(f"❌ Initial Data Loading failed: {e}")
+        logging.error(f" Initial Data Loading failed: {e}")
         sys.exit(1)
 
     ensemble_mode = ENSEMBLE_MODE      # "weighted_by_ap" | "mean" | "hard"
@@ -755,7 +688,7 @@ def run_stage2_multi_core():
 
     FINAL_PARQUET_PATH = output_dir / "stage2_final_predictions_all_data.parquet"
     if skip_if_exists and FINAL_PARQUET_PATH.exists():
-        logging.info(f"✅ Final ensemble prediction file exists at {FINAL_PARQUET_PATH}. Skipping entire stage.")
+        logging.info(f" Final ensemble prediction file exists at {FINAL_PARQUET_PATH}. Skipping entire stage.")
         sys.exit(0)
 
     if not skip_if_exists or any(not (output_dir / f"stage2_predictions_all_{s}.csv").exists() for s in seeds):
@@ -772,14 +705,12 @@ def run_stage2_multi_core():
             except Exception as e:
                 logging.warning(f"Seed {s} run failed: {e}")
 
-    # Load per-seed ALL predictions + optional AP weights
     with SectionTimer("Loading Predictions and Calculating Weights"):
         all_pred_dfs = []
         weights = []
         seeds_used = []
         for s in seeds:
             try:
-                # yhat_stage2 (개별 시드의 최종 예측 레이블)을 포함하여 로드
                 df = load_seed_preds(output_dir, s, scope="all")
                 all_pred_dfs.append(df)
                 if ensemble_mode in ("weighted_by_ap", "soft"):
@@ -793,7 +724,7 @@ def run_stage2_multi_core():
                 continue
 
         if not all_pred_dfs:
-            logging.error("❌ No valid ALL prediction files found for ensembling.")
+            logging.error(" No valid ALL prediction files found for ensembling.")
             sys.exit(1)
 
         import numpy as _np
@@ -810,7 +741,6 @@ def run_stage2_multi_core():
 
     # Aggregate across seeds
     with SectionTimer("Aggregating Ensemble Probabilities (ALL Data)"):
-        # 최종 앙상블 확률 계산을 위해 proba_ensemble 컬럼만 사용
         all_df_proba = pd.concat([df[[ID_COL, "proba_ensemble", "seed", "IS_WHALE_true", "stage2_tvt", "stage1_tvt"]].copy() 
                                   for df in all_pred_dfs], ignore_index=True)
 
@@ -853,7 +783,6 @@ def run_stage2_multi_core():
         
         agg_all = agg_all.set_index(ID_COL)
         for df_yhat_seed in yhat_seed_dfs:
-             # ID_COL을 인덱스로 사용하여 join
              agg_all = agg_all.join(df_yhat_seed, how="left")
         agg_all = agg_all.reset_index()
 
@@ -884,7 +813,7 @@ def run_stage2_multi_core():
     with SectionTimer("Final Threshold Tuning (TEST Data Only)"):
         agg_test = agg_all[agg_all["tvt"] == "test"].copy()
         if len(agg_test) == 0:
-            logging.warning("⚠️ Skipping TEST Ensemble Metrics: Test set is empty.")
+            logging.warning(" Skipping TEST Ensemble Metrics: Test set is empty.")
             report_test = {"scope": "TEST", "fbeta": 0.0, "ap": 0.0}
         else:
             y_true_test = agg_test["IS_WHALE_true"].values
@@ -937,7 +866,7 @@ def run_stage2_multi_core():
 
             FINAL_PARQUET_PATH = output_dir / "stage2_final_predictions_all_data.parquet"
             final_output_df.to_parquet(FINAL_PARQUET_PATH, index=False, engine='pyarrow')
-            logging.info(f"✅ Saved Final Ensemble Predictions to: {FINAL_PARQUET_PATH}")
+            logging.info(f" Saved Final Ensemble Predictions to: {FINAL_PARQUET_PATH}")
 
         final_report_path = output_dir / "stage2_seed_ensemble_report.json"
         report_final = report_all
@@ -947,12 +876,9 @@ def run_stage2_multi_core():
             json.dump(report_final, f, ensure_ascii=False, indent=2)
         logging.info(f"[OK] Saved seed-ensemble report (json): {final_report_path}")
 
-    logging.info("✅ Multi-Seed Ensemble Pipeline Complete.")
+    logging.info(" Multi-Seed Ensemble Pipeline Complete.")
     sys.exit(0)
 
-# -----------------------------
-# Main entry
-# -----------------------------
 def main_cli_entry():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     LOGS_PATH.mkdir(parents=True, exist_ok=True)
@@ -968,7 +894,7 @@ def main_cli_entry():
     except SystemExit:
         pass
     except Exception as e:
-        logging.error(f"☠️ A critical error occurred during pipeline execution: {e}", exc_info=True)
+        logging.error(f" A critical error occurred during pipeline execution: {e}", exc_info=True)
         sys.exit(1)
 
 if __name__ == "__main__":
