@@ -1,6 +1,4 @@
-"""
-Stage 3 Model Tuning, Training, and Diagnostic Plotting for Regression.
-"""
+
 import logging
 import os
 import numpy as np
@@ -23,7 +21,6 @@ from config import (
 )
 from utils import optuna_progress_cb_strict
 
-# === Metric Helper Functions ===
 
 def inverse_transform(p):
     if USE_LOG_TRANSFORM:
@@ -46,8 +43,6 @@ def smape(y_true, y_pred):
     
     return np.mean(numerator / denominator) * 100.0
 
-
-# === Tuning Functions ===
 
 def _get_tuning_bounds(group_key):
     return TUNE_WHALE if group_key == "whale" else TUNE_NON_WHALE
@@ -84,7 +79,7 @@ def tune_lgbm_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
         proba_log = model.predict(X_va)
         
         y_pred_raw = inverse_transform(proba_log)
-        return float(mean_absolute_error(y_va_raw.values, y_pred_raw)) # Minimize MAE
+        return float(mean_absolute_error(y_va_raw.values, y_pred_raw)) 
 
     study = optuna.create_study(direction="minimize", 
                                 sampler=TPESampler(seed=optuna_seed),
@@ -96,7 +91,7 @@ def tune_lgbm_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
     return best
 
 def tune_cat_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw, 
-                 cat_cols_idx, group_key, trials, seed, optuna_seed): # <-- seed, optuna_seed 인자 추가
+                 cat_cols_idx, group_key, trials, seed, optuna_seed):
     np.random.seed(seed)
     
     bounds = _get_tuning_bounds(group_key)["cat"]
@@ -149,7 +144,6 @@ def make_tabpfn_regressor(device, seed, n_ens, input_size = 100):
 
     return construct_tabpfn(TabPFNRegressor, device=device, seed=seed, n_ens=n_ens)
 
-# seed 인자 추가
 def train_and_ensemble_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw, 
                            cat_cols_idx, group_key, trials, has_tabpfn, seed):
     models = {}; best_params = {}; preds_log = {}
@@ -158,7 +152,6 @@ def train_and_ensemble_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
     
     optuna_seed = seed
 
-    # 1. LightGBM
     if not NO_LGBM:
         lgb_params = tune_lgbm_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw, group_key, trials, seed, optuna_seed)
         best_params["lgbm"] = lgb_params 
@@ -169,7 +162,6 @@ def train_and_ensemble_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
         models["lgbm"] = lgbm_reg
         preds_log["lgbm"] = lgbm_reg.predict(X_va)
 
-    # 2. CatBoost
     if not NO_CATBOOST:
         cat_params = tune_cat_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw, cat_cols_idx, group_key, trials, seed, optuna_seed)
         best_params["cat"] = cat_params
@@ -180,7 +172,6 @@ def train_and_ensemble_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
         models["cat"] = cat_reg
         preds_log["cat"] = cat_reg.predict(Pool(X_va, cat_features=cat_cols_idx or None))
 
-    # 3. TabPFN (No tuning)
     if has_tabpfn and not NO_TABPFN:
         from config import TABPFN_DEVICE, TABPFN_CONFIGS
         tab_reg = make_tabpfn_regressor(device=TABPFN_DEVICE, seed=seed, n_ens=TABPFN_CONFIGS, input_size=X_tr.shape[1])
@@ -201,7 +192,6 @@ def train_and_ensemble_reg(X_tr, y_tr_log, X_va, y_va_log, y_va_raw,
     
     return models, best_params, mae_val
 
-# === Prediction Functions ===
 
 def predict_reg_model(model_key, model, X, cat_cols_idx):
     if model_key == "cat":
