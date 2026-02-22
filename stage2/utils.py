@@ -1,6 +1,3 @@
-"""
-Stage 2 Utility Classes and Functions (Timer, Scoring, Cutoff Tuning, CLI Parsing).
-"""
 import logging
 from time import perf_counter
 import math
@@ -25,15 +22,15 @@ class SectionTimer:
         self.t0 = None
     def __enter__(self):
         self.t0 = perf_counter()
-        logging.info(f"▶ START: {self.name}")
+        logging.info(f" START: {self.name}")
         return self
     def __exit__(self, exc_type, exc, tb):
         dt = perf_counter() - self.t0
         if exc:
-            logging.error(f"■ FAIL:  {self.name} ({dt:.1f}s)", exc_info=True)
+            logging.error(f" FAIL:  {self.name} ({dt:.1f}s)", exc_info=True)
             return False 
         else:
-            logging.info(f"■ DONE:  {self.name} ({dt:.1f}s)")
+            logging.info(f" DONE:  {self.name} ({dt:.1f}s)")
             return True 
 
 def _sanitize_cols(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,7 +71,6 @@ def tune_cutoff(y_true, proba, strategy: str, train_pos_prior: float, metric: st
     return _search_cutoff_grid(y_true, proba, center=center, delta=DELTA_AROUND, step=CUT_STEP, metric=metric, beta=beta, min_prec=MIN_PREC_AT_CUT)
 
 def score_stage2_objective(y_true: np.ndarray, proba: np.ndarray) -> float:
-    """Stage 2 튜닝 목적 함수: PR-AUC (Average Precision)를 최대화."""
     try:
         return float(average_precision_score(y_true, proba))
     except ValueError:
