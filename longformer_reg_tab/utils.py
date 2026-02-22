@@ -113,19 +113,14 @@ def load_seq_parquet(path, seq_col='ACTION_DELTA'):
     return df
 
 def class_balanced_mae_loss(logits, targets, beta=0.999):
-    """
-    클래스 불균형을 고려한 평균 절대 오차(MAE) 손실 함수.
-    """
     targets_binary = (targets > 0).float()
     n_pos = targets_binary.sum().clamp(min=1.0)
     n_neg = (len(targets) - n_pos).clamp(min=1.0)
     w_pos = (1 - beta) / (1 - beta**n_pos)
     w_neg = (1 - beta) / (1 - beta**n_neg)
     
-    # MAE 계산
     mae = F.l1_loss(logits, targets, reduction='none')
     
-    # 가중치 적용
     w = targets_binary * w_pos + (1 - targets_binary) * w_neg
     return (w * mae).mean()
 
